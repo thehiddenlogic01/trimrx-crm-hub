@@ -779,7 +779,7 @@ export default function RetentionFinalSubmitPage() {
       const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/search?q=${encodeURIComponent(query)}`);
       if (!res.ok) return null;
       const data = await res.json();
-      const messages: SlackMessage[] = data.messages || [];
+      const messages: SlackMessage[] = Array.isArray(data) ? data : (data.messages || []);
       if (messages.length > 0) return messages[0];
       return null;
     } catch {
@@ -824,7 +824,7 @@ export default function RetentionFinalSubmitPage() {
     setSelectedReport(report);
     setSheetOpen(true);
 
-    if (slackCache[key] !== undefined) return;
+    if (slackCache[key] && slackCache[key] !== null) return;
 
     setSlackLoading((prev) => ({ ...prev, [key]: true }));
     const msg = await fetchSlackMessage(report);
