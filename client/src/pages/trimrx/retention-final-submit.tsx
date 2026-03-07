@@ -213,6 +213,7 @@ function extractCaseFromSlackMsg(text: string) {
 const COLUMNS = [
   { key: "submittedBy", label: "User" },
   { key: "assignedTo", label: "Assigned To" },
+  { key: "slackAction", label: "Slack Action" },
   { key: "caseId", label: "Case ID" },
   { key: "status", label: "Status" },
   { key: "link", label: "Link" },
@@ -452,14 +453,23 @@ function ReplyWithTemplates({
   );
 }
 
+interface SlackActionInfo {
+  checked: boolean;
+  lastReplyUser: string;
+  lastReplyText: string;
+  lastReplyTs: string;
+}
+
 function SlackMessagePanel({
   msg,
   users,
   onClose,
+  onActionUpdate,
 }: {
   msg: SlackMessage;
   users: Record<string, SlackUser>;
   onClose: () => void;
+  onActionUpdate: (info: SlackActionInfo) => void;
 }) {
   const { can } = usePermissions();
   const { toast } = useToast();
@@ -481,12 +491,29 @@ function SlackMessagePanel({
     ? msg.parent_text.replace(/<@[A-Z0-9]+>/g, "").replace(/<[^>]+>/g, "").replace(/\*/g, "").trim().slice(0, 120)
     : "";
 
+  const [localChecked, setLocalChecked] = useState(checked);
+  const [lastReply, setLastReply] = useState<{ user: string; text: string; ts: string } | null>(null);
+
+  const getUserNameStr = useCallback((id: string) => users[id]?.real_name || users[id]?.name || id, [users]);
+
+  const emitUpdate = useCallback((isChecked: boolean, reply?: { user: string; text: string; ts: string } | null) => {
+    const r = reply !== undefined ? reply : lastReply;
+    onActionUpdate({
+      checked: isChecked,
+      lastReplyUser: r ? getUserNameStr(r.user) : "",
+      lastReplyText: r ? r.text : "",
+      lastReplyTs: r ? r.ts : "",
+    });
+  }, [lastReply, onActionUpdate, getUserNameStr]);
+
   const reactMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
       await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, emoji: "white_check_mark" });
     },
     onSuccess: () => {
       toast({ title: "Marked as done" });
+      setLocalChecked(true);
+      emitUpdate(true);
       queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "search"] });
     },
     onError: (err: any) => toast({ title: "Failed to react", description: err.message, variant: "destructive" }),
@@ -498,6 +525,8 @@ function SlackMessagePanel({
     },
     onSuccess: () => {
       toast({ title: "Removed checkmark" });
+      setLocalChecked(false);
+      emitUpdate(false);
       queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "search"] });
     },
     onError: (err: any) => toast({ title: "Failed to remove reaction", description: err.message, variant: "destructive" }),
@@ -509,6 +538,9 @@ function SlackMessagePanel({
     },
     onSuccess: (_d, vars) => {
       toast({ title: "Reply sent" });
+      const newReply = { user: "you", text: vars.text, ts: String(Date.now() / 1000) };
+      setLastReply(newReply);
+      emitUpdate(localChecked, newReply);
       setReplyText((prev) => ({ ...prev, [msg.ts]: "" }));
       setReplyingTo(null);
       queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts] });
@@ -523,10 +555,21 @@ function SlackMessagePanel({
       if (!res.ok) throw new Error("Failed to fetch replies");
       return res.json();
     },
-    enabled: isExpanded && msg.reply_count > 0,
+    enabled: msg.reply_count > 0,
     retry: 1,
     staleTime: 3 * 60 * 1000,
   });
+
+  useEffect(() => {
+    if (threadReplies && threadReplies.length > 0) {
+      const last = threadReplies[threadReplies.length - 1];
+      const newReply = { user: last.user, text: last.text, ts: last.ts };
+      setLastReply(newReply);
+      emitUpdate(localChecked, newReply);
+    } else if (threadReplies && threadReplies.length === 0) {
+      emitUpdate(localChecked, null);
+    }
+  }, [threadReplies]);
 
   return (
     <div className="space-y-4" data-testid="slack-message-panel">
@@ -553,7 +596,7 @@ function SlackMessagePanel({
             <span className="font-semibold text-sm" data-testid="text-slack-user">{getUserName(msg.user)}</span>
             <span className="text-xs text-muted-foreground">{formatTs(msg.ts)}</span>
             {isReply && <Badge variant="outline" className="text-xs gap-1 border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400"><CornerDownRight className="h-3 w-3" /> Reply</Badge>}
-            {checked && <Badge variant="secondary" className="text-xs gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"><CheckSquare className="h-3 w-3" /> Done</Badge>}
+            {localChecked && <Badge variant="secondary" className="text-xs gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"><CheckSquare className="h-3 w-3" /> Done</Badge>}
           </div>
         </div>
       </div>
@@ -589,7 +632,7 @@ function SlackMessagePanel({
 
       <div className="flex items-center gap-2 pt-2 border-t flex-wrap">
         {can("slack-messages", "mark-done") && (
-          !checked ? (
+          !localChecked ? (
             <Button
               variant="outline"
               size="sm"
@@ -711,6 +754,7 @@ export default function RetentionFinalSubmitPage() {
   const slackCacheRef = useRef<Record<string, SlackMessage | null>>({});
   const [slackCache, setSlackCache] = useState<Record<string, SlackMessage | null>>({});
   const [slackLoading, setSlackLoading] = useState<Record<string, boolean>>({});
+  const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>({});
 
   const { data: allReports, isLoading } = useQuery<CvReport[]>({
     queryKey: ["/api/cv-reports"],
@@ -793,7 +837,7 @@ export default function RetentionFinalSubmitPage() {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return COLUMNS.some((col) => {
-      if (col.key === "slackUpdate") return false;
+      if (col.key === "slackUpdate" || col.key === "slackAction") return false;
       const val = (report as any)[col.key];
       return val && String(val).toLowerCase().includes(q);
     });
@@ -810,7 +854,55 @@ export default function RetentionFinalSubmitPage() {
 
   const visibleColumns = COLUMNS.filter((col) => !hiddenColumns.has(col.key));
 
+  const cleanSlackActionText = (text: string) => {
+    return text
+      .replace(/<@[A-Z0-9]+(?:\|[^>]*)?>/g, "")
+      .replace(/<https?:\/\/[^|>]+\|([^>]+)>/g, "$1")
+      .replace(/<https?:\/\/[^>]+>/g, "")
+      .replace(/:[a-z0-9_+-]+:/g, "")
+      .replace(/\*/g, "")
+      .replace(/\n/g, " ")
+      .trim();
+  };
+
   const renderCellContent = (report: CvReport, col: typeof COLUMNS[number]) => {
+    if (col.key === "slackAction") {
+      const key = String(report.id);
+      const action = slackActions[key];
+      const cached = slackCache[key];
+
+      if (!cached && cached !== null) {
+        return <span className="text-muted-foreground text-xs">—</span>;
+      }
+      if (cached === null) {
+        return <span className="text-muted-foreground text-xs">—</span>;
+      }
+
+      const isChecked = action?.checked ?? hasCheckmark(cached.reactions);
+      const replyText = action?.lastReplyText ? cleanSlackActionText(action.lastReplyText) : "";
+      const replyUser = action?.lastReplyUser || "";
+
+      return (
+        <div className="flex flex-col gap-1 min-w-[120px] max-w-[200px]" data-testid={`slack-action-${report.id}`}>
+          {isChecked && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 w-fit">
+              <CheckSquare className="h-3 w-3" />
+              Done
+            </Badge>
+          )}
+          {replyText && (
+            <div className="text-[11px] text-muted-foreground leading-tight">
+              {replyUser && <span className="font-medium text-foreground/70">{replyUser}: </span>}
+              <span className="line-clamp-2">{replyText.length > 80 ? replyText.slice(0, 80) + "..." : replyText}</span>
+            </div>
+          )}
+          {!isChecked && !replyText && (
+            <span className="text-muted-foreground text-xs">—</span>
+          )}
+        </div>
+      );
+    }
+
     if (col.key === "slackUpdate") {
       const key = String(report.id);
       const cached = slackCache[key];
@@ -1046,6 +1138,11 @@ export default function RetentionFinalSubmitPage() {
                 msg={selectedSlackMsg}
                 users={slackUsers || {}}
                 onClose={() => setSheetOpen(false)}
+                onActionUpdate={(info) => {
+                  if (selectedKey) {
+                    setSlackActions((prev) => ({ ...prev, [selectedKey]: info }));
+                  }
+                }}
               />
             ) : selectedKey && slackCache[selectedKey] === null ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
