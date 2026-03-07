@@ -5,6 +5,7 @@ export const APP_PAGES: Record<string, string> = {
   "/analytics": "Analytics",
   "/trimrx/cv-support": "CV Support",
   "/trimrx/cv-report": "CV Report",
+  "/trimrx/retention-final-submit": "Retention Final Submit",
   "/trimrx/slack-messages": "Manage Slack Case",
   "/trimrx/rt-help": "RT Help",
   "/trimrx/cv-slack": "CV Slack",
@@ -36,7 +37,7 @@ export const APP_SECTIONS = [
   {
     key: "trimrx-cv",
     label: "TrimRX CV",
-    routes: ["/trimrx/cv-support", "/trimrx/cv-report", "/trimrx/slack-messages", "/trimrx/rt-help", "/trimrx/cv-slack"],
+    routes: ["/trimrx/cv-support", "/trimrx/cv-report", "/trimrx/retention-final-submit", "/trimrx/slack-messages", "/trimrx/rt-help", "/trimrx/cv-slack"],
   },
   {
     key: "trimrx-disputes",

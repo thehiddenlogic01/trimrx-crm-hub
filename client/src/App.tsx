@@ -19,6 +19,7 @@ const ApiKeysPage = lazy(() => import("@/pages/admin/api-keys"));
 const SlackPage = lazy(() => import("@/pages/slack"));
 const CvSupportPage = lazy(() => import("@/pages/trimrx/cv-support"));
 const CvReportPage = lazy(() => import("@/pages/trimrx/cv-report"));
+const RetentionFinalSubmitPage = lazy(() => import("@/pages/trimrx/retention-final-submit"));
 const CaseFoldersPage = lazy(() => import("@/pages/trimrx/case-folders"));
 const DisputeReportYedidPage = lazy(() => import("@/pages/trimrx/dispute-report-yedid"));
 const DisputesFinderPage = lazy(() => import("@/pages/trimrx/disputes-finder"));
@@ -137,6 +138,9 @@ function AppLayout() {
                   </Route>
                   <Route path="/trimrx/cv-report">
                     {() => <ProtectedRoute component={CvReportPage} path="/trimrx/cv-report" />}
+                  </Route>
+                  <Route path="/trimrx/retention-final-submit">
+                    {() => <ProtectedRoute component={RetentionFinalSubmitPage} path="/trimrx/retention-final-submit" />}
                   </Route>
                   <Route path="/trimrx/case-folders">
                     {() => <ProtectedRoute component={CaseFoldersPage} path="/trimrx/case-folders" />}

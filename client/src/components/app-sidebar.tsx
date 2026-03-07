@@ -38,6 +38,7 @@ import {
   Radio,
   Globe,
   Search,
+  SendHorizonal,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { APP_SECTIONS, hasSectionAccess, hasPageAccess } from "@shared/sections";
@@ -45,6 +46,7 @@ import { APP_SECTIONS, hasSectionAccess, hasPageAccess } from "@shared/sections"
 const trimrxMenu = [
   { title: "CV Support", url: "/trimrx/cv-support", icon: HeadsetIcon },
   { title: "CV Report", url: "/trimrx/cv-report", icon: FileSpreadsheet },
+  { title: "Retention Final Submit", url: "/trimrx/retention-final-submit", icon: SendHorizonal },
   { title: "Manage Slack Case", url: "/trimrx/slack-messages", icon: MessagesSquare },
   { title: "RT Help", url: "/trimrx/rt-help", icon: Headphones },
   { title: "CV Slack", url: "/trimrx/cv-slack", icon: Hash },
