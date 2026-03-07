@@ -743,6 +743,7 @@ export default function CvReportPage() {
     if (isEditor && user?.username) return user.username;
     try { return localStorage.getItem("cv-report-filterAssignedTo") || "all"; } catch { return "all"; }
   });
+  const [filterDate, setFilterDate] = useState<string>("");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
       const saved = localStorage.getItem("cv-report-hidden-columns");
@@ -788,6 +789,7 @@ export default function CvReportPage() {
 
   const { data: reports, isLoading, error } = useQuery<CvReport[]>({
     queryKey: ["/api/cv-reports"],
+    refetchInterval: 15000,
   });
 
   const { data: tokenStatus } = useQuery<{ hasToken: boolean }>({
@@ -1478,6 +1480,18 @@ export default function CvReportPage() {
               </Select>
             )}
             <div className="relative">
+              <Input
+                type="date"
+                value={filterDate}
+                onChange={(e) => {
+                  setFilterDate(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className={`h-7 w-[150px] text-xs ${filterDate ? "bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300" : ""}`}
+                data-testid="input-filter-date"
+              />
+            </div>
+            <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search reports..."
@@ -1942,6 +1956,21 @@ export default function CvReportPage() {
                 if (filterCheckingStatus !== "all" && (report.checkingStatus || "Need Check") !== filterCheckingStatus) return false;
                 if (filterAssignedTo === "unassigned" && report.assignedTo) return false;
                 if (filterAssignedTo !== "all" && filterAssignedTo !== "unassigned" && report.assignedTo !== filterAssignedTo) return false;
+                if (filterDate) {
+                  const reportDate = (report.date || "").trim();
+                  if (!reportDate) return false;
+                  const normalizedReport = reportDate.replace(/\//g, "-");
+                  const parts = normalizedReport.split("-");
+                  let reportYmd = "";
+                  if (parts.length === 3) {
+                    if (parts[0].length === 4) {
+                      reportYmd = normalizedReport;
+                    } else {
+                      reportYmd = `${parts[2]}-${parts[0].padStart(2, "0")}-${parts[1].padStart(2, "0")}`;
+                    }
+                  }
+                  if (reportYmd !== filterDate) return false;
+                }
                 if (!searchQuery.trim()) return true;
                 const query = searchQuery.toLowerCase();
                 return COLUMNS.some((col) => {
