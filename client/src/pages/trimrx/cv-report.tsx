@@ -789,7 +789,6 @@ export default function CvReportPage() {
 
   const { data: reports, isLoading, error } = useQuery<CvReport[]>({
     queryKey: ["/api/cv-reports"],
-    refetchInterval: 15000,
   });
 
   const { data: tokenStatus } = useQuery<{ hasToken: boolean }>({
