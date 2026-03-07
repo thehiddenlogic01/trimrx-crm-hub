@@ -1958,14 +1958,15 @@ export default function CvReportPage() {
                 if (filterDate) {
                   const reportDate = (report.date || "").trim();
                   if (!reportDate) return false;
-                  const normalizedReport = reportDate.replace(/\//g, "-");
-                  const parts = normalizedReport.split("-");
+                  const parts = reportDate.replace(/\//g, "-").split("-");
                   let reportYmd = "";
                   if (parts.length === 3) {
                     if (parts[0].length === 4) {
-                      reportYmd = normalizedReport;
+                      reportYmd = `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
                     } else {
-                      reportYmd = `${parts[2]}-${parts[0].padStart(2, "0")}-${parts[1].padStart(2, "0")}`;
+                      let year = parts[2];
+                      if (year.length === 2) year = (parseInt(year) > 50 ? "19" : "20") + year;
+                      reportYmd = `${year}-${parts[0].padStart(2, "0")}-${parts[1].padStart(2, "0")}`;
                     }
                   }
                   if (reportYmd !== filterDate) return false;
