@@ -1,0 +1,51 @@
+Sub-Reasons with definitions:
+
+Competitor Price — Patient found a lower price at a specific competitor (e.g., local pharmacy, Medvi, Ro).
+
+Bundle Misunderstanding — Patient was surprised by a large upfront charge (3/6/12 months) instead of a monthly fee.
+
+Financial Hardship — Patient can no longer afford the service due to job loss, income change, or financial strain.
+
+Month 2 Refill Price — Patient unhappy with the higher refill price after the first month.
+
+Insurance Expectation — Patient expected insurance to cover the medication and refuses to pay out-of-pocket.
+
+Subscription Misunderstanding — Patient did not realize the purchase renews automatically or is a subscription.
+
+Billing Error — Internal billing mistake such as incorrect charge, missed discount, or wrong amount.
+
+Duplicate Payment — Duplicate account creation or duplicate charge/payment.
+
+Branded Medication Affordability — Patient wants branded medication but is unwilling to pay the higher price.
+
+Promotional Pricing Discrepancy — Patient references an advertised or promotional price that does not match their eligibility or current program pricing.
+
+Severe Side Effects — Patient experienced strong physical side effects (e.g., extreme nausea, vomiting, pancreatitis concerns).
+
+Low Efficacy — Patient feels the medication is not working or weight loss progress is too slow.
+
+Goal Reached — Patient achieved target weight and wants to stop or move to maintenance.
+
+Medical Concerns — External medical advice or health concerns preventing continuation.
+
+Disqualified — Patient was medically disqualified due to contraindications or health history.
+
+Injection/Vial Aversion — Patient uncomfortable with needles or drawing medication from a vial.
+
+Dosing Issues — Requested dose unavailable or provider unwilling to prescribe requested dose.
+
+Fulfillment Latency — Shipment took longer than promised after payment or shipment not delivered.
+
+Order Quality — Medication arrived warm, damaged, or packaging compromised.
+
+Carrier Error — Package lost, stolen, or delivered incorrectly by the carrier.
+
+Consultation Issue — Patient could not meet provider during scheduled telehealth consultation.
+
+Support Latency — Patient waited too long for support response (e.g., >48h).
+
+Technical UX Issue — Patient unable to use portal, reset password, or complete forms.
+
+AI Complaint — Patient complains about AI interaction or AI-generated information.
+
+Other - If nothing clearly matches or is Semorelin, Zofran and NAD confusion
