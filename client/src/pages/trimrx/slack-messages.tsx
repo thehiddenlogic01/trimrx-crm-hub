@@ -1952,7 +1952,7 @@ function MessageCard({
     : "";
 
   return (
-    <Card className={`${isSelected ? "border-primary ring-1 ring-primary/30" : ""} ${checked ? "border-green-300 bg-green-50/30 dark:border-green-800 dark:bg-green-950/20" : ""}`} data-testid={`msg-${msg.ts}`}>
+    <Card className={`border-l-4 ${checked ? "border-l-green-400 border-green-300 bg-green-50/30 dark:border-l-green-600 dark:border-green-800 dark:bg-green-950/20" : "border-l-blue-400 dark:border-l-blue-600"} ${isSelected ? "border-primary ring-1 ring-primary/30" : ""}`} data-testid={`msg-${msg.ts}`}>
       <CardContent className="p-4 space-y-3">
         {isReply && (
           <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3 py-2 text-xs" data-testid={`reply-indicator-${msg.ts}`}>
@@ -2065,10 +2065,10 @@ function MessageCard({
             {msg.attachments.length > 0 && (
               <div className="mt-2 space-y-1">
                 {msg.attachments.map((att, i) => (
-                  <div key={i} className="border-l-4 pl-3 py-1 text-xs text-muted-foreground" style={{ borderColor: att.color ? `#${att.color}` : undefined }}>
-                    {att.title && <p className="font-medium">{att.title}</p>}
-                    {att.text && <p>{att.text}</p>}
-                    {att.service_name && <p className="text-xs opacity-60">{att.service_name}</p>}
+                  <div key={i} className="border-l-2 pl-3 py-1.5 text-xs text-muted-foreground bg-muted/30 rounded-r-md" style={{ borderColor: att.color ? `#${att.color}` : 'hsl(var(--border))' }}>
+                    {att.title && <p className="font-medium text-muted-foreground/80">{att.title}</p>}
+                    {att.text && <p className="opacity-70">{att.text}</p>}
+                    {att.service_name && <p className="text-[11px] opacity-50">{att.service_name}</p>}
                   </div>
                 ))}
               </div>
@@ -2219,28 +2219,28 @@ function MessageCard({
         )}
 
         {isExpanded && (
-          <div className="pl-8 space-y-3 pt-2 border-t">
+          <div className="ml-4 pl-4 space-y-0 pt-2 border-l-2 border-border">
             {loadingReplies ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             ) : threadReplies && threadReplies.length > 0 ? (
-              threadReplies.map((reply) => (
-                <div key={reply.ts} className="flex items-start gap-2" data-testid={`reply-${reply.ts}`}>
+              threadReplies.map((reply, idx) => (
+                <div key={reply.ts} className={`flex items-start gap-2 py-2.5 px-3 rounded-md bg-muted/30 dark:bg-muted/15 ${idx !== 0 ? "mt-1.5" : ""}`} data-testid={`reply-${reply.ts}`}>
                   {getUserAvatar(reply.user) ? (
-                    <img src={getUserAvatar(reply.user)} alt="" className="h-6 w-6 rounded-full flex-shrink-0 mt-0.5" />
+                    <img src={getUserAvatar(reply.user)} alt="" className="h-5 w-5 rounded-full flex-shrink-0 mt-0.5" />
                   ) : (
-                    <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5 text-xs">
+                    <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5 text-[10px] font-medium">
                       {getUserName(reply.user).charAt(0).toUpperCase()}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-xs">{getUserName(reply.user)}</span>
-                      <span className="text-xs text-muted-foreground">{formatTs(reply.ts)}</span>
+                      <span className="font-medium text-xs text-muted-foreground">{getUserName(reply.user)}</span>
+                      <span className="text-[11px] text-muted-foreground/60">{formatTs(reply.ts)}</span>
                     </div>
                     <div
-                      className="text-sm mt-0.5 break-words"
+                      className="text-[13px] mt-0.5 break-words text-foreground/80"
                       dangerouslySetInnerHTML={{ __html: formatSlackText(reply.text, users) }}
                     />
                   </div>
@@ -2248,12 +2248,12 @@ function MessageCard({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive flex-shrink-0"
+                      className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive flex-shrink-0"
                       onClick={() => { if (confirm("Delete this reply?")) deleteMessageMutation.mutate({ timestamp: reply.ts }); }}
                       disabled={deleteMessageMutation.isPending}
                       data-testid={`button-delete-reply-${reply.ts}`}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   )}
                 </div>
