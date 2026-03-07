@@ -508,7 +508,7 @@ function SlackMessagePanel({
 
   const reactMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, emoji: "white_check_mark" });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, name: "white_check_mark" });
     },
     onSuccess: () => {
       toast({ title: "Marked as done" });
@@ -521,7 +521,7 @@ function SlackMessagePanel({
 
   const unreactMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, emoji: "white_check_mark" });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, name: "white_check_mark" });
     },
     onSuccess: () => {
       toast({ title: "Removed checkmark" });
@@ -534,7 +534,7 @@ function SlackMessagePanel({
 
   const replyMutation = useMutation({
     mutationFn: async ({ threadTs, text }: { threadTs: string; text: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { threadTs, text });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { thread_ts: threadTs, text });
     },
     onSuccess: (_d, vars) => {
       toast({ title: "Reply sent" });
