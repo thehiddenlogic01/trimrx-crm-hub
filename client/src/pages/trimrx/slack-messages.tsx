@@ -2233,19 +2233,19 @@ function MessageCard({
               threadReplies.map((reply, idx) => (
                 <div key={reply.ts} className={`flex items-start gap-2 py-2.5 px-3 rounded-md bg-amber-50/60 dark:bg-amber-950/20 ${idx !== 0 ? "mt-1.5" : ""}`} data-testid={`reply-${reply.ts}`}>
                   {getUserAvatar(reply.user) ? (
-                    <img src={getUserAvatar(reply.user)} alt="" className="h-5 w-5 rounded-full flex-shrink-0 mt-0.5" />
+                    <img src={getUserAvatar(reply.user)} alt="" className="h-6 w-6 rounded-full flex-shrink-0 mt-0.5" />
                   ) : (
-                    <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5 text-[10px] font-medium">
+                    <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-medium">
                       {getUserName(reply.user).charAt(0).toUpperCase()}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-xs text-muted-foreground">{getUserName(reply.user)}</span>
-                      <span className="text-[11px] text-muted-foreground/60">{formatTs(reply.ts)}</span>
+                      <span className="text-xs text-muted-foreground/60">{formatTs(reply.ts)}</span>
                     </div>
                     <div
-                      className="text-[13px] mt-0.5 break-words text-foreground/80"
+                      className="text-sm mt-0.5 break-words text-foreground/80"
                       dangerouslySetInnerHTML={{ __html: formatSlackText(reply.text, users) }}
                     />
                   </div>
