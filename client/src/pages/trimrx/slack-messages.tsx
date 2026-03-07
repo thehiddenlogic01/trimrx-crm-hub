@@ -187,7 +187,12 @@ function formatSlackText(text: string, users?: Record<string, SlackUser>) {
   for (const link of links) {
     safe = safe.replace(link.placeholder, link.html);
   }
-  return safe.replace(/\n/g, "<br/>");
+  safe = safe.replace(/\n/g, "<br/>");
+  safe = safe.replace(
+    /(?::small_orange_diamond:|🔸)?\s*\*?Concern\/Request:?\*?\s*(.*?)(?=<br\/>|$)/g,
+    '<div class="concern-block"><span class="concern-label">Concern/Request:</span> $1</div>'
+  );
+  return safe;
 }
 
 function cleanExtractedText(text: string): string {
@@ -2226,7 +2231,7 @@ function MessageCard({
               </div>
             ) : threadReplies && threadReplies.length > 0 ? (
               threadReplies.map((reply, idx) => (
-                <div key={reply.ts} className={`flex items-start gap-2 py-2.5 px-3 rounded-md bg-muted/30 dark:bg-muted/15 ${idx !== 0 ? "mt-1.5" : ""}`} data-testid={`reply-${reply.ts}`}>
+                <div key={reply.ts} className={`flex items-start gap-2 py-2.5 px-3 rounded-md bg-amber-50/60 dark:bg-amber-950/20 ${idx !== 0 ? "mt-1.5" : ""}`} data-testid={`reply-${reply.ts}`}>
                   {getUserAvatar(reply.user) ? (
                     <img src={getUserAvatar(reply.user)} alt="" className="h-5 w-5 rounded-full flex-shrink-0 mt-0.5" />
                   ) : (
