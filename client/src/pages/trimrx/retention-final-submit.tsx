@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 import {
   SendHorizonal, Search, Loader2, ExternalLink, FileSpreadsheet,
-  Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown, CheckCircle2,
+  Eye, EyeOff, CheckCircle2,
 } from "lucide-react";
 import type { CvReport } from "@shared/schema";
 
@@ -42,12 +42,9 @@ const COLUMNS = [
 ] as const;
 
 type ColumnKey = typeof COLUMNS[number]["key"];
-type SortDir = "asc" | "desc" | null;
 
 export default function RetentionFinalSubmitPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortKey, setSortKey] = useState<ColumnKey | null>(null);
-  const [sortDir, setSortDir] = useState<SortDir>(null);
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
       const saved = localStorage.getItem("retention-final-hidden-columns");
@@ -70,26 +67,6 @@ export default function RetentionFinalSubmitPage() {
       return val && String(val).toLowerCase().includes(q);
     });
   });
-
-  const sorted = [...filtered].sort((a, b) => {
-    if (!sortKey || !sortDir) return 0;
-    const aVal = String((a as any)[sortKey] || "").toLowerCase();
-    const bVal = String((b as any)[sortKey] || "").toLowerCase();
-    if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
-    if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
-
-  const toggleSort = (key: ColumnKey) => {
-    if (sortKey === key) {
-      if (sortDir === "asc") setSortDir("desc");
-      else if (sortDir === "desc") { setSortKey(null); setSortDir(null); }
-      else setSortDir("asc");
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
 
   const toggleColumn = (key: ColumnKey) => {
     setHiddenColumns((prev) => {
@@ -240,7 +217,7 @@ export default function RetentionFinalSubmitPage() {
             <div className="flex items-center justify-center py-16" data-testid="loading-state">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : sorted.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground" data-testid="text-empty-state">
               <SendHorizonal className="h-12 w-12 mb-4 opacity-30" />
               <p className="text-sm font-medium">No reports ready for final submission</p>
@@ -254,24 +231,16 @@ export default function RetentionFinalSubmitPage() {
                     {visibleColumns.map((col) => (
                       <TableHead
                         key={col.key}
-                        className="text-xs font-semibold uppercase tracking-wider cursor-pointer select-none whitespace-nowrap"
-                        onClick={() => toggleSort(col.key)}
+                        className="text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                         data-testid={`th-${col.key}`}
                       >
-                        <div className="flex items-center gap-1">
-                          {col.label}
-                          {sortKey === col.key ? (
-                            sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                          ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
-                          )}
-                        </div>
+                        {col.label}
                       </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sorted.map((report) => (
+                  {filtered.map((report) => (
                     <TableRow key={report.id} data-testid={`row-report-${report.id}`}>
                       {visibleColumns.map((col) => (
                         <TableCell key={col.key} className="py-2.5">
