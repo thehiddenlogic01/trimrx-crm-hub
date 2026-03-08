@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -494,6 +494,20 @@ function SlackMessagePanel({
   const [localChecked, setLocalChecked] = useState(checked);
   const [lastReply, setLastReply] = useState<{ user: string; text: string; ts: string } | null>(null);
 
+  const localReactions = useMemo(() => {
+    const orig = msg.reactions || [];
+    if (localChecked === checked) return orig;
+    if (localChecked) {
+      const has = orig.find((r) => r.name === "white_check_mark");
+      if (has) return orig;
+      return [...orig, { name: "white_check_mark", count: 1, users: [] as string[] }];
+    } else {
+      return orig
+        .map((r) => r.name === "white_check_mark" ? { ...r, count: r.count - 1 } : r)
+        .filter((r) => r.count > 0);
+    }
+  }, [msg.reactions, localChecked, checked]);
+
   const getUserNameStr = useCallback((id: string) => users[id]?.real_name || users[id]?.name || id, [users]);
 
   const emitUpdate = useCallback((isChecked: boolean, reply?: { user: string; text: string; ts: string } | null) => {
@@ -619,9 +633,9 @@ function SlackMessagePanel({
         </div>
       )}
 
-      {msg.reactions.length > 0 && (
+      {localReactions.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {msg.reactions.map((r, i) => (
+          {localReactions.map((r, i) => (
             <span key={i} className="inline-flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">
               <span className="text-sm">{emojiFromName(r.name)}</span>
               <span className="font-medium">{r.count}</span>
