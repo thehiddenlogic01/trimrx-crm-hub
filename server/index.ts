@@ -69,6 +69,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const { ensureSchema } = await import("./db");
+  await ensureSchema();
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
