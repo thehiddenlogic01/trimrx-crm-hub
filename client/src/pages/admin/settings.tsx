@@ -1,13 +1,18 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Tag, Package, Crosshair, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight, Tag, Package, Crosshair, AlertTriangle, LayoutDashboard, Eye, EyeOff } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { REASON_SUBREASON_MAP, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS } from "@shared/classification";
+import { APP_PAGES } from "@shared/sections";
 
 const REASON_COLORS: Record<string, string> = {
   "Financial & Pricing": "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
@@ -209,18 +214,133 @@ function ClientThreatSection() {
   );
 }
 
+const SIDEBAR_SECTIONS: { label: string; routes: string[] }[] = [
+  {
+    label: "TrimRX CV",
+    routes: ["/trimrx/cv-support", "/trimrx/cv-report", "/trimrx/retention-final-submit", "/trimrx/slack-messages", "/trimrx/rt-help", "/trimrx/cv-slack", "/trimrx/cv-settings"],
+  },
+  {
+    label: "TrimRX Disputes",
+    routes: ["/trimrx/dispute-report-yedid", "/trimrx/disputes-finder", "/trimrx/case-folders", "/trimrx/disputes-doc", "/trimrx/stripe-submit", "/trimrx/patients-analysis", "/trimrx/dispute-settings"],
+  },
+  {
+    label: "Communication",
+    routes: ["/communication/internal-bd"],
+  },
+  {
+    label: "Database",
+    routes: ["/database/pt-finder", "/database/stripe-payments"],
+  },
+  {
+    label: "Admin",
+    routes: ["/admin/users", "/admin/api-keys", "/slack", "/gpt-chat", "/integrations", "/admin/settings"],
+  },
+];
+
+function SidebarVisibilitySection() {
+  const { toast } = useToast();
+
+  const { data: hiddenItems = [] } = useQuery<string[]>({
+    queryKey: ["/api/cv-settings", "sidebar_hidden_items"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/sidebar_hidden_items", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.options || [];
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (newHidden: string[]) => {
+      await apiRequest("POST", "/api/cv-settings/sidebar_hidden_items", { options: newHidden });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-settings", "sidebar_hidden_items"] });
+      toast({ title: "Saved", description: "Sidebar visibility updated." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleItem = (route: string) => {
+    const newHidden = hiddenItems.includes(route)
+      ? hiddenItems.filter((r) => r !== route)
+      : [...hiddenItems, route];
+    saveMutation.mutate(newHidden);
+  };
+
+  const isVisible = (route: string) => !hiddenItems.includes(route);
+
+  return (
+    <Card data-testid="card-sidebar-visibility-section">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <LayoutDashboard className="h-5 w-5 text-primary" />
+          Sidebar Menu Visibility
+        </CardTitle>
+        <CardDescription>
+          Control which menu items are visible in the sidebar for all users. Hidden items will not appear in the navigation. Admin pages cannot be hidden.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {SIDEBAR_SECTIONS.map((section) => (
+          <div key={section.label}>
+            <h4 className="text-sm font-semibold text-muted-foreground mb-3">{section.label}</h4>
+            <div className="space-y-2">
+              {section.routes.map((route) => {
+                const label = APP_PAGES[route] || route;
+                const isAdmin = section.label === "Admin";
+                const visible = isVisible(route);
+                return (
+                  <div
+                    key={route}
+                    className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${visible ? "bg-background" : "bg-muted/50 opacity-60"}`}
+                    data-testid={`row-sidebar-item-${route.replace(/\//g, "-").slice(1)}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {visible ? (
+                        <Eye className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className={`text-sm ${visible ? "text-foreground" : "text-muted-foreground line-through"}`}>
+                        {label}
+                      </span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {route}
+                      </Badge>
+                    </div>
+                    <Switch
+                      checked={visible}
+                      onCheckedChange={() => toggleItem(route)}
+                      disabled={isAdmin || saveMutation.isPending}
+                      data-testid={`switch-sidebar-${route.replace(/\//g, "-").slice(1)}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-admin-settings-title">
-          Classification Settings
+          Admin Settings
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          View the AI classification categories used for analyzing patient cancellation and refund requests.
+          Manage sidebar visibility and view AI classification categories.
         </p>
       </div>
 
+      <SidebarVisibilitySection />
       <ReasonSection />
       <ProductTypeSection />
       <DesiredActionSection />

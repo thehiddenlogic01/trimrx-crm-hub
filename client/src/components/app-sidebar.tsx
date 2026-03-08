@@ -1,4 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -105,6 +106,17 @@ export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location] = useLocation();
 
+  const { data: hiddenItems = [] } = useQuery<string[]>({
+    queryKey: ["/api/cv-settings", "sidebar_hidden_items"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/sidebar_hidden_items", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.options || [];
+    },
+    staleTime: 60 * 1000,
+  });
+
   const role = (user as any)?.role || "manager";
   const permissions = parsePermissions((user as any)?.permissions);
 
@@ -137,7 +149,7 @@ export function AppSidebar() {
           .filter((section) => hasSectionAccess(role, permissions, section.key))
           .map((section) => {
             const visibleItems = section.items.filter(
-              (item) => hasPageAccess(role, permissions, item.url)
+              (item) => hasPageAccess(role, permissions, item.url) && (section.key === "admin" || !hiddenItems.includes(item.url))
             );
             if (visibleItems.length === 0) return null;
             return (

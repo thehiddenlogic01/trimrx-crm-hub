@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "./storage";
 
-const ALLOWED_KEYS = ["slack_status_rt_options"];
+const ALLOWED_KEYS = ["slack_status_rt_options", "sidebar_hidden_items"];
 
 export function setupCvSettingsRoutes(app: Express) {
   app.get("/api/cv-settings/:key", (req, res) => {
