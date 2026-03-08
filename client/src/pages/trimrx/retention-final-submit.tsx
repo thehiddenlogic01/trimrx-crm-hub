@@ -1264,6 +1264,27 @@ export default function RetentionFinalSubmitPage() {
 
   const readyReports = (allReports || []).filter((r) => r.checkingStatus === "Ready");
 
+  const filterRelevantMessages = useCallback((messages: SlackMessage[]): SlackMessage[] => {
+    if (messages.length <= 1) return messages;
+    const users = queryClient.getQueryData<Record<string, SlackUser>>(["/api/slack/users"]) || {};
+    const targetIds: string[] = [];
+    for (const [id, u] of Object.entries(users)) {
+      const allNames = `${(u.real_name || "").toLowerCase()} ${(u.name || "").toLowerCase()}`;
+      if ((allNames.includes("karla") && allNames.includes("garibay")) ||
+          (allNames.includes("olia") && allNames.includes("orlowska"))) {
+        targetIds.push(id);
+      }
+    }
+    if (targetIds.length === 0) return messages;
+    const filtered = messages.filter((msg) => {
+      const text = msg.text || "";
+      return targetIds.some((id) => text.includes(`<@${id}>`)) ||
+        text.toLowerCase().includes("karla garibay") ||
+        text.toLowerCase().includes("olia orlowska");
+    });
+    return filtered.length > 0 ? filtered : messages;
+  }, []);
+
   const fetchSlackMessages = useCallback(async (report: CvReport): Promise<SlackMessage[] | null> => {
     const query = buildSearchQuery(report);
     if (!query) return null;
@@ -1272,12 +1293,12 @@ export default function RetentionFinalSubmitPage() {
       if (!res.ok) return null;
       const data = await res.json();
       const messages: SlackMessage[] = Array.isArray(data) ? data : (data.messages || []);
-      if (messages.length > 0) return messages;
+      if (messages.length > 0) return filterRelevantMessages(messages);
       return null;
     } catch {
       return null;
     }
-  }, []);
+  }, [filterRelevantMessages]);
 
   const handleSlackClick = async (report: CvReport) => {
     const key = String(report.id);
