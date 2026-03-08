@@ -771,7 +771,6 @@ export default function RetentionFinalSubmitPage() {
   const [slackLoading, setSlackLoading] = useState<Record<string, boolean>>({});
   const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>({});
   const [sheetSending, setSheetSending] = useState<Record<number, boolean>>({});
-  const [sheetSent, setSheetSent] = useState<Record<number, boolean>>({});
 
   const { data: allReports, isLoading } = useQuery<CvReport[]>({
     queryKey: ["/api/cv-reports"],
@@ -855,7 +854,7 @@ export default function RetentionFinalSubmitPage() {
         reportIds: [report.id],
         sortOrder: "first-last",
       });
-      setSheetSent((prev) => ({ ...prev, [report.id]: true }));
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
       toast({ title: "Added Retention Tracker Successfully!" });
     } catch (err: any) {
       toast({ title: "Failed to send", description: err.message, variant: "destructive" });
@@ -899,7 +898,7 @@ export default function RetentionFinalSubmitPage() {
   const renderCellContent = (report: CvReport, col: typeof COLUMNS[number]) => {
     if (col.key === "sendToSheet") {
       const sending = sheetSending[report.id];
-      const sent = sheetSent[report.id];
+      const sent = report.sentToSheet === "yes";
       if (sent) {
         return (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded whitespace-nowrap" data-testid={`button-send-sheet-${report.id}`}>

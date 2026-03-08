@@ -223,6 +223,10 @@ export function setupGSheetsRoutes(app: Express) {
         });
       }
 
+      for (const report of selectedReports) {
+        await storage.updateCvReport(report.id, { sentToSheet: "yes" } as any);
+      }
+
       res.json({ success: true, pushed: selectedReports.length });
     } catch (err: any) {
       res.status(500).json({ error: `Push failed: ${err.message}` });

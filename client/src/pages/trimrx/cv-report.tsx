@@ -57,6 +57,7 @@ const COLUMNS = [
   { key: "subReason", label: "Sub-reason" },
   { key: "desiredAction", label: "Desired Action" },
   { key: "checkingStatus", label: "Checking Status" },
+  { key: "sentToSheet", label: "Sheet Status" },
 ] as const;
 
 type ColumnKey = typeof COLUMNS[number]["key"];
@@ -82,6 +83,7 @@ const emptyForm: Record<ColumnKey, string> = {
   subReason: "",
   desiredAction: "",
   checkingStatus: "Need Check",
+  sentToSheet: "",
 };
 
 const CHECKING_STATUS_OPTIONS = ["Need Check", "Ready"];
@@ -1248,6 +1250,18 @@ export default function CvReportPage() {
       );
     }
 
+    if (col.key === "sentToSheet") {
+      if (report.sentToSheet === "yes") {
+        return (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded whitespace-nowrap" data-testid={`sheet-status-${report.id}`}>
+            <CheckCircle2 className="h-3 w-3" />
+            Added to RT
+          </span>
+        );
+      }
+      return <span className="text-muted-foreground">—</span>;
+    }
+
     if (!value) return <span className="text-muted-foreground">—</span>;
 
     if (col.key === "notesTrimrx") {
@@ -1662,7 +1676,7 @@ export default function CvReportPage() {
                 <DialogTitle>{editingId !== null ? "Edit Report" : "Add New Report"}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-3">
-                {COLUMNS.map((col) => (
+                {COLUMNS.filter((col) => col.key !== "sentToSheet").map((col) => (
                   <div key={col.key} className="space-y-1">
                     <Label htmlFor={col.key}>{col.label}</Label>
                     {col.key === "productType" ? (
