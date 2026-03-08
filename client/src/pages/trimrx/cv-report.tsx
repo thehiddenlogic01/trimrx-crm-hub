@@ -910,20 +910,6 @@ export default function CvReportPage() {
     },
   });
 
-  const deleteAllMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("DELETE", "/api/cv-reports");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
-      setSelectedIds(new Set());
-      toast({ title: "All reports deleted" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to delete all", description: err.message, variant: "destructive" });
-    },
-  });
-
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importRows, setImportRows] = useState<Record<string, string>[]>([]);
   const [importErrors, setImportErrors] = useState<Record<number, string>>({});
@@ -1717,24 +1703,6 @@ export default function CvReportPage() {
                     <Upload className="h-4 w-4" />
                     Import
                   </button>
-                  {can("cv-report", "delete") && (
-                    <>
-                      <div className="border-t my-1" />
-                      <button
-                        className="w-full flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-accent transition-colors text-destructive disabled:opacity-50 disabled:pointer-events-none"
-                        data-testid="button-delete-all"
-                        disabled={deleteAllMutation.isPending}
-                        onClick={() => {
-                          if (window.confirm("Are you sure you want to delete ALL reports? This cannot be undone.")) {
-                            deleteAllMutation.mutate();
-                          }
-                        }}
-                      >
-                        {deleteAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                        Delete All
-                      </button>
-                    </>
-                  )}
                 </div>
               </PopoverContent>
             </Popover>
