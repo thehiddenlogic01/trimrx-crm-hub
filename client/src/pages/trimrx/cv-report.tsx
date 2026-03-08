@@ -558,7 +558,7 @@ function SlackMessageDialog({ link, caseId }: { link: string; caseId: string }) 
           Slack
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Hash className="h-5 w-5" />
@@ -847,6 +847,7 @@ export default function CvReportPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
       toast({ title: "Report added" });
       resetForm();
+      setDialogOpen(false);
     },
     onError: (err: Error) => {
       toast({ title: "Failed to add", description: err.message, variant: "destructive" });
@@ -870,6 +871,7 @@ export default function CvReportPage() {
     },
     onSuccess: () => {
       resetForm();
+      setDialogOpen(false);
     },
     onError: (err: Error, _v, context) => {
       if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
@@ -1098,7 +1100,6 @@ export default function CvReportPage() {
   function resetForm() {
     setForm({ ...emptyForm });
     setEditingId(null);
-    setDialogOpen(false);
   }
 
   function openEdit(report: CvReport) {
@@ -1270,7 +1271,7 @@ export default function CvReportPage() {
           <DialogTrigger asChild>
             <span className="truncate block max-w-[200px] cursor-pointer hover:text-primary transition-colors" title={value} data-testid={`notes-expand-${report.id}`}>{value}</span>
           </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle className="text-sm font-semibold">Notes — {report.name || report.caseId}</DialogTitle>
             </DialogHeader>
@@ -1662,7 +1663,7 @@ export default function CvReportPage() {
                 </div>
               </PopoverContent>
             </Popover>
-          <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setDialogOpen(open); }}>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             {can("cv-report", "add") && (
               <DialogTrigger asChild>
                 <Button data-testid="button-add-report" onClick={openCreate}>
@@ -1671,7 +1672,7 @@ export default function CvReportPage() {
                 </Button>
               </DialogTrigger>
             )}
-            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle>{editingId !== null ? "Edit Report" : "Add New Report"}</DialogTitle>
               </DialogHeader>
@@ -2149,8 +2150,8 @@ export default function CvReportPage() {
         </Card>
       </div>
 
-      <Dialog open={importDialogOpen} onOpenChange={(open) => { if (!open && !importing) { setImportDialogOpen(false); setImportRows([]); setImportErrors({}); setImportFileName(""); } }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <Dialog open={importDialogOpen} onOpenChange={(open) => { if (!open && !importing) setImportDialogOpen(false); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
