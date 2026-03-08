@@ -2037,6 +2037,35 @@ export default function RetentionFinalSubmitPage() {
               {selectedReport?.caseId && (
                 <Badge variant="secondary" className="text-xs">{selectedReport.caseId}</Badge>
               )}
+              {selectedReport?.caseId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 text-xs ml-auto"
+                  data-testid="button-search-by-case-id"
+                  disabled={slackLoading[String(selectedReport.id)]}
+                  onClick={async () => {
+                    const key = String(selectedReport.id);
+                    setSlackLoading((prev) => ({ ...prev, [key]: true }));
+                    try {
+                      const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/search?q=${encodeURIComponent(selectedReport.caseId)}`);
+                      if (res.ok) {
+                        const data = await res.json();
+                        const messages: SlackMessage[] = Array.isArray(data) ? data : (data.messages || []);
+                        const filtered = filterRelevantMessages(messages);
+                        const result = filtered.length > 0 ? filtered : null;
+                        persistentSlackCache[key] = result;
+                        setSlackCache((prev) => ({ ...prev, [key]: result }));
+                      }
+                    } catch {} finally {
+                      setSlackLoading((prev) => ({ ...prev, [key]: false }));
+                    }
+                  }}
+                >
+                  <Search className="h-3 w-3 mr-1" />
+                  Search by Case ID
+                </Button>
+              )}
             </SheetTitle>
             <SheetDescription>
               {selectedReport?.notesTrimrx
