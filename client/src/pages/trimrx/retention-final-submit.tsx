@@ -855,12 +855,8 @@ export default function RetentionFinalSubmitPage() {
         reportIds: [report.id],
         sortOrder: "first-last",
       });
-      await apiRequest("PATCH", `/api/cv-reports/${report.id}`, {
-        checkingStatus: "Updated on RT",
-      });
       setSheetSent((prev) => ({ ...prev, [report.id]: true }));
-      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
-      toast({ title: "Sent to sheet" });
+      toast({ title: "Added Retention Tracker Successfully!" });
     } catch (err: any) {
       toast({ title: "Failed to send", description: err.message, variant: "destructive" });
     } finally {
@@ -904,23 +900,29 @@ export default function RetentionFinalSubmitPage() {
     if (col.key === "sendToSheet") {
       const sending = sheetSending[report.id];
       const sent = sheetSent[report.id];
+      if (sent) {
+        return (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded whitespace-nowrap" data-testid={`button-send-sheet-${report.id}`}>
+            <CheckCircle2 className="h-3 w-3" />
+            Added Retention Tracker Successfully!
+          </span>
+        );
+      }
       return (
         <Button
-          variant={sent ? "secondary" : "outline"}
+          variant="default"
           size="sm"
           onClick={() => handleSendToSheet(report)}
-          disabled={sending || sent}
-          className={`h-7 text-xs gap-1 whitespace-nowrap ${sent ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : ""}`}
+          disabled={sending}
+          className="h-7 text-xs gap-1 whitespace-nowrap"
           data-testid={`button-send-sheet-${report.id}`}
         >
           {sending ? (
             <Loader2 className="h-3 w-3 animate-spin" />
-          ) : sent ? (
-            <CheckCircle2 className="h-3 w-3" />
           ) : (
             <FileSpreadsheet className="h-3 w-3" />
           )}
-          {sent ? "Sent" : "Send to Sheet"}
+          {sending ? "Sending..." : "Send to Sheet"}
         </Button>
       );
     }
