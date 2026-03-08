@@ -961,6 +961,14 @@ export default function RetentionFinalSubmitPage() {
         </span>
       );
     }
+    if (col.key === "status" && value) {
+      const short = value.length > 20 ? value.slice(0, 20) + "..." : value;
+      return (
+        <span className="text-xs max-w-[120px] block truncate" title={value}>
+          {short}
+        </span>
+      );
+    }
     if (col.key === "productType" && value) {
       const items = value.split(",").map((v: string) => v.trim()).filter(Boolean);
       return (
