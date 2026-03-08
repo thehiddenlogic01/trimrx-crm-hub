@@ -44,7 +44,7 @@ import {
   SendHorizonal, Search, Loader2, ExternalLink, FileSpreadsheet,
   Eye, EyeOff, CheckCircle2, MessageSquare, CheckSquare, XCircle,
   Send, MessageCircle, ChevronUp, ChevronDown, CreditCard, DollarSign,
-  AlertCircle, FileText, CornerDownRight, Undo2,
+  AlertCircle, FileText, CornerDownRight, Undo2, Trash2,
 } from "lucide-react";
 import type { CvReport } from "@shared/schema";
 
@@ -575,6 +575,39 @@ function SlackMessagePanel({
     onError: (err: any) => toast({ title: "Failed to reply", description: err.message, variant: "destructive" }),
   });
 
+  const deleteReplyMutation = useMutation({
+    mutationFn: async ({ timestamp }: { timestamp: string }) => {
+      await apiRequest("DELETE", `/api/slack/channels/${CHANNEL_ID}/messages/${timestamp}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Reply deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts] });
+    },
+    onError: (err: any) => toast({ title: "Failed to delete reply", description: err.message, variant: "destructive" }),
+  });
+
+  const replyReactMutation = useMutation({
+    mutationFn: async ({ timestamp }: { timestamp: string }) => {
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, name: "white_check_mark" });
+    },
+    onSuccess: (_d, vars) => {
+      toast({ title: "Reaction added" });
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts] });
+    },
+    onError: (err: any) => toast({ title: "Failed to react", description: err.message, variant: "destructive" }),
+  });
+
+  const replyUnreactMutation = useMutation({
+    mutationFn: async ({ timestamp }: { timestamp: string }) => {
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, name: "white_check_mark" });
+    },
+    onSuccess: (_d, vars) => {
+      toast({ title: "Reaction removed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts] });
+    },
+    onError: (err: any) => toast({ title: "Failed to remove reaction", description: err.message, variant: "destructive" }),
+  });
+
   const { data: threadReplies, isLoading: loadingReplies } = useQuery<ThreadReply[]>({
     queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts],
     queryFn: async ({ signal }) => {
@@ -737,27 +770,79 @@ function SlackMessagePanel({
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : threadReplies && threadReplies.length > 0 ? (
-            threadReplies.map((reply, idx) => (
-              <div key={reply.ts} className={`flex items-start gap-2 py-2.5 px-3 rounded-md bg-amber-50/60 dark:bg-amber-950/20 ${idx !== 0 ? "mt-1.5" : ""}`} data-testid={`reply-${reply.ts}`}>
-                {getUserAvatar(reply.user) ? (
-                  <img src={getUserAvatar(reply.user)} alt="" className="h-6 w-6 rounded-full flex-shrink-0 mt-0.5" />
-                ) : (
-                  <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-medium">
-                    {getUserName(reply.user).charAt(0).toUpperCase()}
+            threadReplies.map((reply, idx) => {
+              const replyHasCheck = reply.reactions?.some((r) => r.name === "white_check_mark");
+              return (
+                <div key={reply.ts} className={`flex items-start gap-2 py-2.5 px-3 rounded-md bg-amber-50/60 dark:bg-amber-950/20 ${idx !== 0 ? "mt-1.5" : ""}`} data-testid={`reply-${reply.ts}`}>
+                  {getUserAvatar(reply.user) ? (
+                    <img src={getUserAvatar(reply.user)} alt="" className="h-6 w-6 rounded-full flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-medium">
+                      {getUserName(reply.user).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-xs text-muted-foreground">{getUserName(reply.user)}</span>
+                      <span className="text-xs text-muted-foreground/60">{formatTs(reply.ts)}</span>
+                    </div>
+                    <div
+                      className="text-sm mt-0.5 break-words text-foreground/80"
+                      dangerouslySetInnerHTML={{ __html: formatSlackText(reply.text, users) }}
+                    />
+                    {reply.reactions && reply.reactions.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {reply.reactions.map((r) => (
+                          <span key={r.name} className="inline-flex items-center gap-0.5 text-xs bg-muted/60 rounded px-1.5 py-0.5">
+                            {SLACK_EMOJI[r.name] || `:${r.name}:`} {r.count}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-xs text-muted-foreground">{getUserName(reply.user)}</span>
-                    <span className="text-xs text-muted-foreground/60">{formatTs(reply.ts)}</span>
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                    {replyHasCheck ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-green-600 hover:text-red-500"
+                        onClick={() => replyUnreactMutation.mutate({ timestamp: reply.ts })}
+                        disabled={replyUnreactMutation.isPending}
+                        data-testid={`button-unreact-reply-${reply.ts}`}
+                        title="Remove checkmark"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-green-600"
+                        onClick={() => replyReactMutation.mutate({ timestamp: reply.ts })}
+                        disabled={replyReactMutation.isPending}
+                        data-testid={`button-react-reply-${reply.ts}`}
+                        title="Mark as done"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {can("slack-messages", "delete-message") && reply.bot_id && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => { if (confirm("Delete this reply?")) deleteReplyMutation.mutate({ timestamp: reply.ts }); }}
+                        disabled={deleteReplyMutation.isPending}
+                        data-testid={`button-delete-reply-${reply.ts}`}
+                        title="Delete reply"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
-                  <div
-                    className="text-sm mt-0.5 break-words text-foreground/80"
-                    dangerouslySetInnerHTML={{ __html: formatSlackText(reply.text, users) }}
-                  />
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="text-xs text-muted-foreground">No replies yet</p>
           )}
