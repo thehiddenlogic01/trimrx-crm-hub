@@ -853,7 +853,25 @@ function SlackMessagePanel({
 }
 
 const persistentSlackCache: Record<string, SlackMessage[] | null> = {};
-const persistentSlackActions: Record<string, SlackActionInfo> = {};
+
+const SLACK_ACTIONS_STORAGE_KEY = "retention-slack-actions";
+function loadSlackActions(): Record<string, SlackActionInfo> {
+  try {
+    const saved = localStorage.getItem(SLACK_ACTIONS_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return {};
+}
+function saveSlackActions(actions: Record<string, SlackActionInfo>) {
+  try {
+    localStorage.setItem(SLACK_ACTIONS_STORAGE_KEY, JSON.stringify(actions));
+  } catch {}
+}
+function saveSlackAction(key: string, info: SlackActionInfo) {
+  const all = loadSlackActions();
+  all[key] = info;
+  saveSlackActions(all);
+}
 
 export default function RetentionFinalSubmitPage() {
   const { toast } = useToast();
@@ -870,7 +888,7 @@ export default function RetentionFinalSubmitPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [slackCache, setSlackCache] = useState<Record<string, SlackMessage[] | null>>(persistentSlackCache);
   const [slackLoading, setSlackLoading] = useState<Record<string, boolean>>({});
-  const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>(persistentSlackActions);
+  const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>(() => loadSlackActions());
   const [sheetSending, setSheetSending] = useState<Record<number, boolean>>({});
 
   const { data: allReports, isLoading } = useQuery<CvReport[]>({
@@ -911,9 +929,10 @@ export default function RetentionFinalSubmitPage() {
 
     if (persistentSlackCache[key] !== undefined && persistentSlackCache[key] !== null) {
       setSlackCache((prev) => ({ ...prev, [key]: persistentSlackCache[key] }));
-      if (persistentSlackActions[key]) {
-        setSlackActions((prev) => ({ ...prev, [key]: persistentSlackActions[key] }));
-      }
+    }
+    const savedActions = loadSlackActions();
+    if (savedActions[key]) {
+      setSlackActions((prev) => ({ ...prev, [key]: savedActions[key] }));
     }
 
     setSlackLoading((prev) => ({ ...prev, [key]: true }));
@@ -949,7 +968,7 @@ export default function RetentionFinalSubmitPage() {
           lastReplyText: lastReply ? lastReply.text : "",
           lastReplyTs: lastReply ? lastReply.ts : "",
         };
-        persistentSlackActions[key] = actionInfo;
+        saveSlackAction(key, actionInfo);
         setSlackActions((prev) => ({ ...prev, [key]: actionInfo }));
       } else if (msgs === null) {
         persistentSlackCache[key] = null;
@@ -1463,7 +1482,7 @@ export default function RetentionFinalSubmitPage() {
                       onClose={() => setSheetOpen(false)}
                       onActionUpdate={(info) => {
                         if (selectedKey) {
-                          persistentSlackActions[selectedKey] = info;
+                          saveSlackAction(selectedKey, info);
                           setSlackActions((prev) => ({ ...prev, [selectedKey]: info }));
                         }
                       }}
