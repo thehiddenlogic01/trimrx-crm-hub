@@ -1253,20 +1253,9 @@ export default function CvReportPage() {
     if (col.key === "notesTrimrx") {
       return (
         <Dialog>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DialogTrigger asChild>
-                <span className="truncate block max-w-[200px] cursor-pointer hover:text-primary transition-colors" data-testid={`notes-expand-${report.id}`}>{value}</span>
-              </DialogTrigger>
-            </TooltipTrigger>
-            <TooltipContent
-              side="bottom"
-              align="start"
-              className="max-w-[500px] p-4 break-words bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 shadow-xl rounded-lg"
-            >
-              <p className="text-base leading-relaxed whitespace-pre-wrap text-foreground">{value}</p>
-            </TooltipContent>
-          </Tooltip>
+          <DialogTrigger asChild>
+            <span className="truncate block max-w-[200px] cursor-pointer hover:text-primary transition-colors" title={value} data-testid={`notes-expand-${report.id}`}>{value}</span>
+          </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-sm font-semibold">Notes — {report.name || report.caseId}</DialogTitle>
