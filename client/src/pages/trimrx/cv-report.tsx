@@ -38,7 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Pencil, Loader2, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, X, Search, Upload, ArrowUpDown, AlertTriangle, ExternalLink, Download, MessageCircle, Send, CheckSquare, Hash, RefreshCw, Settings2, Eye, EyeOff, UserPlus, Copy, CheckCircle2, CircleDot, FileUp, Shield, Undo2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ALL_REASONS, REASON_SUBREASON_MAP, ALL_SUB_REASONS, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS, getSubReasonsForReason } from "@shared/classification";
+import { ALL_REASONS, REASON_SUBREASON_MAP, ALL_SUB_REASONS, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS, getSubReasonsForReason, getReasonForSubReason } from "@shared/classification";
 
 
 const COLUMNS = [
@@ -253,6 +253,71 @@ function InlineSelectCell({ reportId, colKey, value, options }: { reportId: numb
         </SelectItem>
         {options.map((opt) => (
           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function InlineSubReasonCell({ reportId, value }: { reportId: number; value: string }) {
+  const { toast } = useToast();
+
+  const updateMutation = useMutation({
+    mutationFn: async (newSubReason: string) => {
+      const parentReason = newSubReason ? getReasonForSubReason(newSubReason) : null;
+      const body: Record<string, string> = { subReason: newSubReason };
+      if (parentReason) body.reason = parentReason;
+      if (!newSubReason) body.reason = "";
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, body);
+      return await res.json();
+    },
+    onMutate: (newSubReason: string) => {
+      queryClient.cancelQueries({ queryKey: ["/api/cv-reports"] });
+      const prev = queryClient.getQueryData<CvReport[]>(["/api/cv-reports"]);
+      if (prev) {
+        const parentReason = newSubReason ? getReasonForSubReason(newSubReason) : null;
+        queryClient.setQueryData<CvReport[]>(["/api/cv-reports"],
+          prev.map((r) => r.id === reportId ? { ...r, subReason: newSubReason, ...(parentReason ? { reason: parentReason } : newSubReason ? {} : { reason: "" }) } : r)
+        );
+      }
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  return (
+    <Select
+      value={value || ""}
+      onValueChange={(val) => {
+        const newVal = val === "__clear__" ? "" : val;
+        if (newVal !== value) {
+          updateMutation.mutate(newVal);
+        }
+      }}
+    >
+      <SelectTrigger
+        className="h-6 text-xs px-2 py-0 min-w-[100px] border-dashed"
+        data-testid={`select-subReason-${reportId}`}
+      >
+        <SelectValue placeholder="—" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__clear__">
+          <span className="text-muted-foreground">Clear</span>
+        </SelectItem>
+        {Object.entries(REASON_SUBREASON_MAP).map(([reason, subs]) => (
+          <div key={reason}>
+            <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{reason}</div>
+            {subs.map((sub) => (
+              <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+            ))}
+          </div>
         ))}
       </SelectContent>
     </Select>
@@ -1200,9 +1265,7 @@ export default function CvReportPage() {
     }
 
     if (col.key === "subReason") {
-      const reason = (report as any).reason || "";
-      const opts = reason && REASON_SUBREASON_MAP[reason] ? REASON_SUBREASON_MAP[reason] : ALL_SUB_REASONS;
-      return canAllEdit ? <InlineSelectCell reportId={report.id} colKey={col.key} value={value} options={opts} /> : <span>{value}</span>;
+      return canAllEdit ? <InlineSubReasonCell reportId={report.id} value={value} /> : <span>{value}</span>;
     }
 
     if (col.key === "desiredAction") {
@@ -1858,7 +1921,11 @@ export default function CvReportPage() {
                     ) : col.key === "subReason" ? (
                       <Select
                         value={form[col.key] || ""}
-                        onValueChange={(val) => setForm((f) => ({ ...f, [col.key]: val === "__clear__" ? "" : val }))}
+                        onValueChange={(val) => {
+                          const newSub = val === "__clear__" ? "" : val;
+                          const parentReason = newSub ? getReasonForSubReason(newSub) : "";
+                          setForm((f) => ({ ...f, subReason: newSub, reason: parentReason || (newSub ? f.reason : "") }));
+                        }}
                       >
                         <SelectTrigger id={col.key} data-testid={`input-${col.key}`}>
                           <SelectValue placeholder="Select sub-reason" />
@@ -1867,11 +1934,13 @@ export default function CvReportPage() {
                           <SelectItem value="__clear__">
                             <span className="text-muted-foreground">None</span>
                           </SelectItem>
-                          {(form.reason && REASON_SUBREASON_MAP[form.reason]
-                            ? REASON_SUBREASON_MAP[form.reason]
-                            : ALL_SUB_REASONS
-                          ).map((sr) => (
-                            <SelectItem key={sr} value={sr}>{sr}</SelectItem>
+                          {Object.entries(REASON_SUBREASON_MAP).map(([reason, subs]) => (
+                            <div key={reason}>
+                              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{reason}</div>
+                              {subs.map((sr) => (
+                                <SelectItem key={sr} value={sr}>{sr}</SelectItem>
+                              ))}
+                            </div>
                           ))}
                         </SelectContent>
                       </Select>

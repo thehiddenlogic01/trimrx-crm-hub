@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ALL_REASONS, REASON_SUBREASON_MAP, ALL_SUB_REASONS, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS } from "@shared/classification";
+import { ALL_REASONS, REASON_SUBREASON_MAP, ALL_SUB_REASONS, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS, getReasonForSubReason } from "@shared/classification";
 import {
   Table,
   TableBody,
@@ -392,6 +392,71 @@ function InlineDropdownCell({ reportId, colKey, value, options }: { reportId: nu
         </SelectItem>
         {options.map((opt) => (
           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function InlineSubReasonDropdownCell({ reportId, value }: { reportId: number; value: string }) {
+  const { toast } = useToast();
+
+  const updateMutation = useMutation({
+    mutationFn: async (newSubReason: string) => {
+      const parentReason = newSubReason ? getReasonForSubReason(newSubReason) : null;
+      const body: Record<string, string> = { subReason: newSubReason };
+      if (parentReason) body.reason = parentReason;
+      if (!newSubReason) body.reason = "";
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, body);
+      return await res.json();
+    },
+    onMutate: (newSubReason: string) => {
+      queryClient.cancelQueries({ queryKey: ["/api/cv-reports"] });
+      const prev = queryClient.getQueryData<CvReport[]>(["/api/cv-reports"]);
+      if (prev) {
+        const parentReason = newSubReason ? getReasonForSubReason(newSubReason) : null;
+        queryClient.setQueryData<CvReport[]>(["/api/cv-reports"],
+          prev.map((r) => r.id === reportId ? { ...r, subReason: newSubReason, ...(parentReason ? { reason: parentReason } : newSubReason ? {} : { reason: "" }) } : r)
+        );
+      }
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  return (
+    <Select
+      value={value || ""}
+      onValueChange={(val) => {
+        const newVal = val === "__clear__" ? "" : val;
+        if (newVal !== value) {
+          updateMutation.mutate(newVal);
+        }
+      }}
+    >
+      <SelectTrigger
+        className="h-6 text-xs px-2 py-0 min-w-[100px] border-dashed"
+        data-testid={`select-subReason-${reportId}`}
+      >
+        <SelectValue placeholder="—" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__clear__">
+          <span className="text-muted-foreground">Clear</span>
+        </SelectItem>
+        {Object.entries(REASON_SUBREASON_MAP).map(([reason, subs]) => (
+          <div key={reason}>
+            <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{reason}</div>
+            {subs.map((sub) => (
+              <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+            ))}
+          </div>
         ))}
       </SelectContent>
     </Select>
@@ -1522,9 +1587,7 @@ export default function RetentionFinalSubmitPage() {
     }
 
     if (col.key === "subReason") {
-      const reason = (report as any).reason || "";
-      const opts = reason && REASON_SUBREASON_MAP[reason] ? REASON_SUBREASON_MAP[reason] : ALL_SUB_REASONS;
-      if (canQuickEdit) return <InlineDropdownCell reportId={report.id} colKey={col.key} value={value} options={opts} />;
+      if (canQuickEdit) return <InlineSubReasonDropdownCell reportId={report.id} value={value} />;
       return <span className="text-xs">{value || "—"}</span>;
     }
 
