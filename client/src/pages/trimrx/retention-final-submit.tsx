@@ -1123,9 +1123,9 @@ export default function RetentionFinalSubmitPage() {
   });
 
   const { data: slackUsers } = useQuery<Record<string, SlackUser>>({
-    queryKey: ["/api/slack/channels", CHANNEL_ID, "users"],
+    queryKey: ["/api/slack/users"],
     queryFn: async () => {
-      const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/users`);
+      const res = await fetch("/api/slack/users");
       if (!res.ok) return {};
       return res.json();
     },
@@ -1186,7 +1186,7 @@ export default function RetentionFinalSubmitPage() {
           } catch {}
         }
         const getUserName = (id: string) => {
-          const cached = queryClient.getQueryData<Record<string, SlackUser>>(["/api/slack/channels", CHANNEL_ID, "users"]);
+          const cached = queryClient.getQueryData<Record<string, SlackUser>>(["/api/slack/users"]);
           return cached?.[id]?.real_name || cached?.[id]?.name || id;
         };
         const actionInfo: SlackActionInfo = {
