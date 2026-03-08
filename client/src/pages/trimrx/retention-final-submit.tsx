@@ -39,11 +39,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   SendHorizonal, Search, Loader2, ExternalLink, FileSpreadsheet,
   Eye, EyeOff, CheckCircle2, MessageSquare, CheckSquare, XCircle,
   Send, MessageCircle, ChevronUp, ChevronDown, CreditCard, DollarSign,
-  AlertCircle, FileText, CornerDownRight,
+  AlertCircle, FileText, CornerDownRight, Undo2,
 } from "lucide-react";
 import type { CvReport } from "@shared/schema";
 
@@ -767,6 +768,7 @@ export default function RetentionFinalSubmitPage() {
     } catch {}
     return new Set<ColumnKey>();
   });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [slackCache, setSlackCache] = useState<Record<string, SlackMessage[] | null>>(persistentSlackCache);
@@ -877,6 +879,62 @@ export default function RetentionFinalSubmitPage() {
     }
   };
 
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(ids: number[]) {
+    const allSelected = ids.every((id) => selectedIds.has(id));
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }
+
+  const [undoing, setUndoing] = useState(false);
+  const handleUndoPush = async (ids: number[]) => {
+    setUndoing(true);
+    try {
+      await apiRequest("POST", "/api/gsheets/undo-push", { reportIds: ids });
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+      setSelectedIds(new Set());
+      toast({ title: `Undo successful for ${ids.length} report(s)` });
+    } catch (err: any) {
+      toast({ title: "Undo failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUndoing(false);
+    }
+  };
+
+  const handleBulkSendToSheet = async () => {
+    const ids = Array.from(selectedIds).filter((id) => {
+      const r = readyReports.find((rr) => rr.id === id);
+      return r?.sentToSheet !== "yes";
+    });
+    if (ids.length === 0) return;
+    try {
+      await apiRequest("POST", "/api/gsheets/push", { reportIds: ids, sortOrder: "first-last" });
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+      setSelectedIds(new Set());
+      toast({ title: `Added ${ids.length} report(s) to Retention Tracker!` });
+    } catch (err: any) {
+      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+    }
+  };
+
   const filtered = readyReports.filter((report) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -915,10 +973,23 @@ export default function RetentionFinalSubmitPage() {
       const sent = report.sentToSheet === "yes";
       if (sent) {
         return (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded whitespace-nowrap" data-testid={`button-send-sheet-${report.id}`}>
-            <CheckCircle2 className="h-3 w-3" />
-            Added Retention Tracker Successfully!
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded whitespace-nowrap" data-testid={`sheet-status-${report.id}`}>
+              <CheckCircle2 className="h-3 w-3" />
+              Added Retention Tracker Successfully!
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={() => handleUndoPush([report.id])}
+              disabled={undoing}
+              title="Undo — remove from tracker"
+              data-testid={`button-undo-sheet-${report.id}`}
+            >
+              <Undo2 className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+            </Button>
+          </div>
         );
       }
       return (
@@ -1089,7 +1160,53 @@ export default function RetentionFinalSubmitPage() {
                 </Badge>
               )}
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {selectedIds.size > 0 && (
+                <>
+                  <Badge variant="secondary" className="text-xs" data-testid="badge-selected-count">
+                    {selectedIds.size} selected
+                  </Badge>
+                  {(() => {
+                    const selectedSent = Array.from(selectedIds).filter((id) => {
+                      const r = readyReports.find((rr) => rr.id === id);
+                      return r?.sentToSheet === "yes";
+                    });
+                    const selectedUnsent = Array.from(selectedIds).filter((id) => {
+                      const r = readyReports.find((rr) => rr.id === id);
+                      return r?.sentToSheet !== "yes";
+                    });
+                    return (
+                      <>
+                        {selectedUnsent.length > 0 && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={handleBulkSendToSheet}
+                            data-testid="button-bulk-send-sheet"
+                          >
+                            <FileSpreadsheet className="h-3 w-3" />
+                            Send {selectedUnsent.length} to Sheet
+                          </Button>
+                        )}
+                        {selectedSent.length > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={() => handleUndoPush(selectedSent)}
+                            disabled={undoing}
+                            data-testid="button-bulk-undo-sheet"
+                          >
+                            <Undo2 className="h-3 w-3" />
+                            Undo {selectedSent.length}
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </>
+              )}
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
@@ -1161,6 +1278,13 @@ export default function RetentionFinalSubmitPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id))}
+                        onCheckedChange={() => toggleSelectAll(filtered.map((r) => r.id))}
+                        data-testid="checkbox-select-all"
+                      />
+                    </TableHead>
                     {visibleColumns.map((col) => (
                       <TableHead
                         key={col.key}
@@ -1174,7 +1298,18 @@ export default function RetentionFinalSubmitPage() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((report) => (
-                    <TableRow key={report.id} data-testid={`row-report-${report.id}`}>
+                    <TableRow
+                      key={report.id}
+                      className={selectedIds.has(report.id) ? "bg-muted/50" : ""}
+                      data-testid={`row-report-${report.id}`}
+                    >
+                      <TableCell className="py-2.5">
+                        <Checkbox
+                          checked={selectedIds.has(report.id)}
+                          onCheckedChange={() => toggleSelect(report.id)}
+                          data-testid={`checkbox-select-${report.id}`}
+                        />
+                      </TableCell>
                       {visibleColumns.map((col) => (
                         <TableCell key={col.key} className="py-2.5">
                           {renderCellContent(report, col)}

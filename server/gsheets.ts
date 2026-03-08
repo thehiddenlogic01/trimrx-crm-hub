@@ -286,6 +286,21 @@ export function setupGSheetsRoutes(app: Express) {
     }
   });
 
+  app.post("/api/gsheets/undo-push", async (req: Request, res: Response) => {
+    try {
+      const { reportIds } = req.body;
+      if (!reportIds || !Array.isArray(reportIds) || reportIds.length === 0) {
+        return res.status(400).json({ error: "No report IDs provided" });
+      }
+      for (const id of reportIds) {
+        await storage.updateCvReport(id, { sentToSheet: "" } as any);
+      }
+      res.json({ success: true, undone: reportIds.length });
+    } catch (err: any) {
+      res.status(500).json({ error: `Undo failed: ${err.message}` });
+    }
+  });
+
   app.post("/api/gsheets/clear", async (req: Request, res: Response) => {
     try {
       const config = await getGSheetConfig();

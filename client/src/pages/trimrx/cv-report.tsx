@@ -34,7 +34,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Pencil, Loader2, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, X, Search, Upload, ArrowUpDown, AlertTriangle, ExternalLink, Download, MessageCircle, Send, CheckSquare, Hash, RefreshCw, Settings2, Eye, EyeOff, UserPlus, Copy, CheckCircle2, CircleDot, FileUp, Shield } from "lucide-react";
+import { Plus, Trash2, Pencil, Loader2, FileSpreadsheet, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check, X, Search, Upload, ArrowUpDown, AlertTriangle, ExternalLink, Download, MessageCircle, Send, CheckSquare, Hash, RefreshCw, Settings2, Eye, EyeOff, UserPlus, Copy, CheckCircle2, CircleDot, FileUp, Shield, Undo2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ALL_REASONS, REASON_SUBREASON_MAP, ALL_SUB_REASONS, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS, getSubReasonsForReason } from "@shared/classification";
@@ -1069,6 +1069,21 @@ export default function CvReportPage() {
     },
   });
 
+  const undoPushMutation = useMutation({
+    mutationFn: async (reportIds: number[]) => {
+      const res = await apiRequest("POST", "/api/gsheets/undo-push", { reportIds });
+      return await res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+      toast({ title: `Undo successful for ${data.undone} report(s)` });
+      setSelectedIds(new Set());
+    },
+    onError: (err: Error) => {
+      toast({ title: "Undo failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const isGSheetsReady = gsheetsConfig.data?.hasCredentials && gsheetsConfig.data?.spreadsheetId && Object.keys(gsheetsConfig.data?.columnMapping || {}).length > 0;
 
   function toggleSelect(id: number) {
@@ -1254,10 +1269,23 @@ export default function CvReportPage() {
     if (col.key === "sentToSheet") {
       if (report.sentToSheet === "yes") {
         return (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded whitespace-nowrap" data-testid={`sheet-status-${report.id}`}>
-            <CheckCircle2 className="h-3 w-3" />
-            Added to RT
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/50 px-2 py-1 rounded whitespace-nowrap" data-testid={`sheet-status-${report.id}`}>
+              <CheckCircle2 className="h-3 w-3" />
+              Added to RT
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={() => undoPushMutation.mutate([report.id])}
+              disabled={undoPushMutation.isPending}
+              title="Undo — remove from tracker"
+              data-testid={`button-undo-sheet-${report.id}`}
+            >
+              <Undo2 className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+            </Button>
+          </div>
         );
       }
       return <span className="text-muted-foreground">—</span>;
@@ -1608,20 +1636,39 @@ export default function CvReportPage() {
                     {checkingDuplicates ? "Checking..." : "Check Duplicate"}
                   </button>
                   {can("cv-report", "push-sheets") && isGSheetsReady && (
-                    <button
-                      className="w-full flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                      data-testid="button-push-gsheets"
-                      disabled={pushMutation.isPending || (reports || []).length === 0}
-                      onClick={() => {
-                        const ids = selectedIds.size > 0
-                          ? Array.from(selectedIds)
-                          : (reports || []).map((r) => r.id);
-                        pushMutation.mutate(ids);
-                      }}
-                    >
-                      {pushMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                      {selectedIds.size > 0 ? `Push ${selectedIds.size} to Sheets` : "Push All to Sheets"}
-                    </button>
+                    <>
+                      <button
+                        className="w-full flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                        data-testid="button-push-gsheets"
+                        disabled={pushMutation.isPending || (reports || []).length === 0}
+                        onClick={() => {
+                          const ids = selectedIds.size > 0
+                            ? Array.from(selectedIds)
+                            : (reports || []).map((r) => r.id);
+                          pushMutation.mutate(ids);
+                        }}
+                      >
+                        {pushMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {selectedIds.size > 0 ? `Push ${selectedIds.size} to Sheets` : "Push All to Sheets"}
+                      </button>
+                      {selectedIds.size > 0 && (() => {
+                        const sentIds = Array.from(selectedIds).filter((id) => {
+                          const r = (reports || []).find((rr) => rr.id === id);
+                          return r?.sentToSheet === "yes";
+                        });
+                        return sentIds.length > 0 ? (
+                          <button
+                            className="w-full flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-accent transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                            data-testid="button-undo-push-gsheets"
+                            disabled={undoPushMutation.isPending}
+                            onClick={() => undoPushMutation.mutate(sentIds)}
+                          >
+                            {undoPushMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
+                            Undo {sentIds.length} from Sheets
+                          </button>
+                        ) : null;
+                      })()}
+                    </>
                   )}
                   <div className="border-t my-1" />
                   <p className="text-xs font-medium text-muted-foreground px-2 py-1">Data</p>
