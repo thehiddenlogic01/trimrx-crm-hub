@@ -1222,6 +1222,11 @@ export default function RetentionFinalSubmitPage() {
       return localStorage.getItem("retention-slack-status-filter") || "";
     } catch { return ""; }
   });
+  const [filterAssignedTo, setFilterAssignedTo] = useState<string>(() => {
+    try {
+      return localStorage.getItem("retention-filter-assigned-to") || "all";
+    } catch { return "all"; }
+  });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -1232,6 +1237,10 @@ export default function RetentionFinalSubmitPage() {
 
   const { data: allReports, isLoading } = useQuery<CvReport[]>({
     queryKey: ["/api/cv-reports"],
+  });
+
+  const { data: crmUsers } = useQuery<{ id: string; username: string }[]>({
+    queryKey: ["/api/users"],
   });
 
   const { data: slackUsers } = useQuery<Record<string, SlackUser>>({
@@ -1420,6 +1429,11 @@ export default function RetentionFinalSubmitPage() {
       }
       if (reportYmd !== filterDate) return false;
     }
+    if (filterAssignedTo !== "all") {
+      if (filterAssignedTo === "unassigned") {
+        if (report.assignedTo) return false;
+      } else if (report.assignedTo !== filterAssignedTo) return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return COLUMNS.some((col) => {
@@ -1431,7 +1445,7 @@ export default function RetentionFinalSubmitPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterDate, slackStatusFilter]);
+  }, [searchQuery, filterDate, slackStatusFilter, filterAssignedTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -1758,6 +1772,25 @@ export default function RetentionFinalSubmitPage() {
                   <SelectItem value="__empty__">Not Set</SelectItem>
                   {SLACK_STATUS_RT_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={filterAssignedTo}
+                onValueChange={(val) => {
+                  setFilterAssignedTo(val);
+                  setCurrentPage(1);
+                  try { localStorage.setItem("retention-filter-assigned-to", val); } catch {}
+                }}
+              >
+                <SelectTrigger className={`h-8 text-xs w-[150px] ${filterAssignedTo !== "all" ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-300" : ""}`} data-testid="filter-assigned-to">
+                  <SelectValue placeholder="All Users" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Users</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {(crmUsers || []).map((u) => (
+                    <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
