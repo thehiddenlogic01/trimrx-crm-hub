@@ -10,6 +10,7 @@ async function getGSheetConfig() {
   const spreadsheetId = await storage.getSetting(`${GSHEET_SETTINGS_PREFIX}spreadsheet_id`);
   const sheetName = await storage.getSetting(`${GSHEET_SETTINGS_PREFIX}sheet_name`);
   const columnMapping = await storage.getSetting(`${GSHEET_SETTINGS_PREFIX}column_mapping`);
+  const colorMapping = await storage.getSetting(`${GSHEET_SETTINGS_PREFIX}color_mapping`);
   const startRow = await storage.getSetting(`${GSHEET_SETTINGS_PREFIX}start_row`);
 
   return {
@@ -17,7 +18,18 @@ async function getGSheetConfig() {
     spreadsheetId: spreadsheetId || "",
     sheetName: sheetName || "Sheet1",
     columnMapping: columnMapping ? JSON.parse(columnMapping) : {},
+    colorMapping: colorMapping ? JSON.parse(colorMapping) : {},
     startRow: startRow ? parseInt(startRow) : 2,
+  };
+}
+
+function hexToRgb(hex: string): { red: number; green: number; blue: number } | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!result) return null;
+  return {
+    red: parseInt(result[1], 16) / 255,
+    green: parseInt(result[2], 16) / 255,
+    blue: parseInt(result[3], 16) / 255,
   };
 }
 
@@ -38,6 +50,7 @@ export function setupGSheetsRoutes(app: Express) {
         spreadsheetId: config.spreadsheetId,
         sheetName: config.sheetName,
         columnMapping: config.columnMapping,
+        colorMapping: config.colorMapping,
         startRow: config.startRow,
         hasCredentials: !!config.credentials,
       });
@@ -48,7 +61,7 @@ export function setupGSheetsRoutes(app: Express) {
 
   app.post("/api/gsheets/config", async (req: Request, res: Response) => {
     try {
-      const { credentials, spreadsheetId, sheetName, columnMapping, startRow } = req.body;
+      const { credentials, spreadsheetId, sheetName, columnMapping, colorMapping, startRow } = req.body;
 
       if (credentials !== undefined) {
         await storage.setSetting(`${GSHEET_SETTINGS_PREFIX}credentials`, credentials);
@@ -61,6 +74,9 @@ export function setupGSheetsRoutes(app: Express) {
       }
       if (columnMapping !== undefined) {
         await storage.setSetting(`${GSHEET_SETTINGS_PREFIX}column_mapping`, JSON.stringify(columnMapping));
+      }
+      if (colorMapping !== undefined) {
+        await storage.setSetting(`${GSHEET_SETTINGS_PREFIX}color_mapping`, JSON.stringify(colorMapping));
       }
       if (startRow !== undefined) {
         await storage.setSetting(`${GSHEET_SETTINGS_PREFIX}start_row`, String(startRow));
@@ -109,6 +125,7 @@ export function setupGSheetsRoutes(app: Express) {
       }
 
       const mapping = config.columnMapping as Record<string, string>;
+      const colorMap = config.colorMapping as Record<string, { fill?: string; text?: string }>;
       if (Object.keys(mapping).length === 0) {
         return res.status(400).json({ error: "Column mapping is not configured" });
       }
@@ -181,6 +198,42 @@ export function setupGSheetsRoutes(app: Express) {
             },
           },
         ];
+
+        for (const [field, colLetter] of Object.entries(mapping)) {
+          const colors = colorMap[field];
+          if (!colors) continue;
+          const colIdx = columnLetterToIndex(colLetter);
+          const fillRgb = colors.fill ? hexToRgb(colors.fill) : null;
+          const textRgb = colors.text ? hexToRgb(colors.text) : null;
+          if (!fillRgb && !textRgb) continue;
+
+          const cellFormat: any = {};
+          const fieldsList: string[] = [];
+
+          if (fillRgb) {
+            cellFormat.backgroundColor = fillRgb;
+            fieldsList.push("userEnteredFormat.backgroundColor");
+          }
+          if (textRgb) {
+            cellFormat.textFormat = { ...(cellFormat.textFormat || {}), foregroundColorStyle: { rgbColor: textRgb } };
+            cellFormat.textFormat.foregroundColor = textRgb;
+            fieldsList.push("userEnteredFormat.textFormat.foregroundColor");
+          }
+
+          batchRequests.push({
+            repeatCell: {
+              range: {
+                sheetId,
+                startRowIndex: startRowIdx,
+                endRowIndex: endRowIdx,
+                startColumnIndex: colIdx,
+                endColumnIndex: colIdx + 1,
+              },
+              cell: { userEnteredFormat: cellFormat },
+              fields: fieldsList.join(","),
+            },
+          });
+        }
 
         const dropdownFields: Record<string, string[]> = {
           reason: ALL_REASONS,

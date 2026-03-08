@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Sheet, Loader2, Save, Plus, Trash2, Download, Upload } from "lucide-react";
+import { Sheet, Loader2, Save, Plus, Trash2, Download, Upload, Paintbrush, Type } from "lucide-react";
 
 const CV_REPORT_FIELDS = [
   { key: "submittedBy", label: "User" },
@@ -30,10 +30,16 @@ const CV_REPORT_FIELDS = [
 
 const COLUMN_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
+interface ColorConfig {
+  fill?: string;
+  text?: string;
+}
+
 interface GSheetConfig {
   spreadsheetId: string;
   sheetName: string;
   columnMapping: Record<string, string>;
+  colorMapping: Record<string, ColorConfig>;
   startRow: number;
   hasCredentials: boolean;
 }
@@ -41,6 +47,7 @@ interface GSheetConfig {
 export default function ApiKeysPage() {
   const { toast } = useToast();
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [colorMapping, setColorMapping] = useState<Record<string, ColorConfig>>({});
 
   const { data: config, isLoading } = useQuery<GSheetConfig>({
     queryKey: ["/api/gsheets/config"],
@@ -49,6 +56,7 @@ export default function ApiKeysPage() {
   useEffect(() => {
     if (config) {
       setColumnMapping(config.columnMapping || {});
+      setColorMapping(config.colorMapping || {});
     }
   }, [config]);
 
@@ -80,7 +88,7 @@ export default function ApiKeysPage() {
   });
 
   function handleSaveMapping() {
-    saveMutation.mutate({ columnMapping });
+    saveMutation.mutate({ columnMapping, colorMapping });
   }
 
   function handleBackupSettings() {
@@ -89,6 +97,7 @@ export default function ApiKeysPage() {
       sheetName: config?.sheetName,
       startRow: config?.startRow,
       columnMapping,
+      colorMapping,
       backupDate: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -109,6 +118,7 @@ export default function ApiKeysPage() {
       try {
         const data = JSON.parse(ev.target?.result as string);
         if (data.columnMapping) setColumnMapping(data.columnMapping);
+        if (data.colorMapping) setColorMapping(data.colorMapping);
         toast({ title: "Settings restored", description: "Review the mappings and click Save to apply." });
       } catch {
         toast({ title: "Invalid backup file", variant: "destructive" });
@@ -135,6 +145,11 @@ export default function ApiKeysPage() {
       delete next[field];
       return next;
     });
+    setColorMapping((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   }
 
   function updateMappingField(oldField: string, newField: string) {
@@ -144,6 +159,26 @@ export default function ApiKeysPage() {
       delete next[oldField];
       next[newField] = col;
       return next;
+    });
+    setColorMapping((prev) => {
+      const colors = prev[oldField];
+      const next = { ...prev };
+      delete next[oldField];
+      if (colors) next[newField] = colors;
+      return next;
+    });
+  }
+
+  function updateColor(field: string, type: "fill" | "text", value: string) {
+    setColorMapping((prev) => {
+      const existing = prev[field] || {};
+      if (!value) {
+        const next = { ...prev, [field]: { ...existing } };
+        delete next[field][type];
+        if (!next[field].fill && !next[field].text) delete next[field];
+        return next;
+      }
+      return { ...prev, [field]: { ...existing, [type]: value } };
     });
   }
 
@@ -208,15 +243,18 @@ export default function ApiKeysPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_100px_40px] gap-2 text-xs font-semibold text-muted-foreground px-1">
+              <div className="grid grid-cols-[1fr_80px_44px_44px_40px] gap-2 text-xs font-semibold text-muted-foreground px-1">
                 <span>CV Report Field</span>
-                <span>Sheet Column</span>
+                <span>Column</span>
+                <span className="text-center" title="Fill Color"><Paintbrush className="h-3 w-3 mx-auto" /></span>
+                <span className="text-center" title="Text Color"><Type className="h-3 w-3 mx-auto" /></span>
                 <span></span>
               </div>
               {mappingEntries.map(([field, col]) => {
                 const fieldLabel = CV_REPORT_FIELDS.find((f) => f.key === field)?.label || field;
+                const colors = colorMapping[field] || {};
                 return (
-                  <div key={field} className="grid grid-cols-[1fr_100px_40px] gap-2 items-center" data-testid={`mapping-row-${field}`}>
+                  <div key={field} className="grid grid-cols-[1fr_80px_44px_44px_40px] gap-2 items-center" data-testid={`mapping-row-${field}`}>
                     <Select value={field} onValueChange={(val) => updateMappingField(field, val)}>
                       <SelectTrigger className="h-8 text-sm">
                         <SelectValue>{fieldLabel}</SelectValue>
@@ -245,6 +283,46 @@ export default function ApiKeysPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <div className="relative flex items-center justify-center">
+                      <input
+                        type="color"
+                        value={colors.fill || "#ffffff"}
+                        onChange={(e) => updateColor(field, "fill", e.target.value)}
+                        className="w-8 h-8 rounded border cursor-pointer p-0"
+                        title="Fill Color"
+                        data-testid={`color-fill-${field}`}
+                        style={{ backgroundColor: colors.fill || "#ffffff" }}
+                      />
+                      {colors.fill && (
+                        <button
+                          className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-destructive text-white rounded-full text-[8px] flex items-center justify-center leading-none"
+                          onClick={() => updateColor(field, "fill", "")}
+                          title="Clear fill color"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative flex items-center justify-center">
+                      <input
+                        type="color"
+                        value={colors.text || "#000000"}
+                        onChange={(e) => updateColor(field, "text", e.target.value)}
+                        className="w-8 h-8 rounded border cursor-pointer p-0"
+                        title="Text Color"
+                        data-testid={`color-text-${field}`}
+                        style={{ backgroundColor: colors.text || "#000000" }}
+                      />
+                      {colors.text && (
+                        <button
+                          className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-destructive text-white rounded-full text-[8px] flex items-center justify-center leading-none"
+                          onClick={() => updateColor(field, "text", "")}
+                          title="Clear text color"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"
