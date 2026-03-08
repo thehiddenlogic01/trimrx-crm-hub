@@ -212,6 +212,7 @@ function extractCaseFromSlackMsg(text: string) {
 const COLUMNS = [
   { key: "submittedBy", label: "User" },
   { key: "assignedTo", label: "Assigned To" },
+  { key: "sendToSheet", label: "" },
   { key: "slackAction", label: "Slack Action" },
   { key: "caseId", label: "Case ID" },
   { key: "status", label: "Status" },
@@ -754,6 +755,7 @@ function SlackMessagePanel({
 }
 
 export default function RetentionFinalSubmitPage() {
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
@@ -768,6 +770,8 @@ export default function RetentionFinalSubmitPage() {
   const [slackCache, setSlackCache] = useState<Record<string, SlackMessage[] | null>>({});
   const [slackLoading, setSlackLoading] = useState<Record<string, boolean>>({});
   const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>({});
+  const [sheetSending, setSheetSending] = useState<Record<number, boolean>>({});
+  const [sheetSent, setSheetSent] = useState<Record<number, boolean>>({});
 
   const { data: allReports, isLoading } = useQuery<CvReport[]>({
     queryKey: ["/api/cv-reports"],
@@ -844,11 +848,31 @@ export default function RetentionFinalSubmitPage() {
     setSlackLoading((prev) => ({ ...prev, [key]: false }));
   };
 
+  const handleSendToSheet = async (report: CvReport) => {
+    setSheetSending((prev) => ({ ...prev, [report.id]: true }));
+    try {
+      await apiRequest("POST", "/api/gsheets/push", {
+        reportIds: [report.id],
+        sortOrder: "first-last",
+      });
+      await apiRequest("PATCH", `/api/cv-reports/${report.id}`, {
+        checkingStatus: "Updated on RT",
+      });
+      setSheetSent((prev) => ({ ...prev, [report.id]: true }));
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+      toast({ title: "Sent to sheet" });
+    } catch (err: any) {
+      toast({ title: "Failed to send", description: err.message, variant: "destructive" });
+    } finally {
+      setSheetSending((prev) => ({ ...prev, [report.id]: false }));
+    }
+  };
+
   const filtered = readyReports.filter((report) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return COLUMNS.some((col) => {
-      if (col.key === "slackUpdate" || col.key === "slackAction") return false;
+      if (col.key === "slackUpdate" || col.key === "slackAction" || col.key === "sendToSheet") return false;
       const val = (report as any)[col.key];
       return val && String(val).toLowerCase().includes(q);
     });
@@ -877,6 +901,29 @@ export default function RetentionFinalSubmitPage() {
   };
 
   const renderCellContent = (report: CvReport, col: typeof COLUMNS[number]) => {
+    if (col.key === "sendToSheet") {
+      const sending = sheetSending[report.id];
+      const sent = sheetSent[report.id];
+      return (
+        <Button
+          variant={sent ? "secondary" : "outline"}
+          size="sm"
+          onClick={() => handleSendToSheet(report)}
+          disabled={sending || sent}
+          className={`h-7 text-xs gap-1 whitespace-nowrap ${sent ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : ""}`}
+          data-testid={`button-send-sheet-${report.id}`}
+        >
+          {sending ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : sent ? (
+            <CheckCircle2 className="h-3 w-3" />
+          ) : (
+            <FileSpreadsheet className="h-3 w-3" />
+          )}
+          {sent ? "Sent" : "Send to Sheet"}
+        </Button>
+      );
+    }
     if (col.key === "slackAction") {
       const key = String(report.id);
       const action = slackActions[key];
@@ -1062,7 +1109,7 @@ export default function RetentionFinalSubmitPage() {
                     </Button>
                   )}
                   <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                    {COLUMNS.map((col) => (
+                    {COLUMNS.filter((col) => col.label).map((col) => (
                       <button
                         key={col.key}
                         className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-muted"
