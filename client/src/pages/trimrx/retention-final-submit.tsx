@@ -54,6 +54,7 @@ import {
   Eye, EyeOff, CheckCircle2, MessageSquare, CheckSquare, XCircle,
   Send, MessageCircle, ChevronUp, ChevronDown, CreditCard, DollarSign,
   AlertCircle, FileText, CornerDownRight, Undo2, Trash2, Check, X,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import type { CvReport } from "@shared/schema";
 
@@ -1098,6 +1099,8 @@ export default function RetentionFinalSubmitPage() {
   const { can } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState<string>("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
       const saved = localStorage.getItem("retention-final-hidden-columns");
@@ -1310,6 +1313,14 @@ export default function RetentionFinalSubmitPage() {
       return val && String(val).toLowerCase().includes(q);
     });
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterDate, slackStatusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedData = filtered.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
 
   const toggleColumn = (key: ColumnKey) => {
     setHiddenColumns((prev) => {
@@ -1715,8 +1726,8 @@ export default function RetentionFinalSubmitPage() {
                   <TableRow>
                     <TableHead className="w-10">
                       <Checkbox
-                        checked={filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id))}
-                        onCheckedChange={() => toggleSelectAll(filtered.map((r) => r.id))}
+                        checked={paginatedData.length > 0 && paginatedData.every((r) => selectedIds.has(r.id))}
+                        onCheckedChange={() => toggleSelectAll(paginatedData.map((r) => r.id))}
                         data-testid="checkbox-select-all"
                       />
                     </TableHead>
@@ -1732,7 +1743,7 @@ export default function RetentionFinalSubmitPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map((report) => (
+                  {paginatedData.map((report) => (
                     <TableRow
                       key={report.id}
                       className={selectedIds.has(report.id) ? "bg-muted/50" : ""}
@@ -1754,6 +1765,79 @@ export default function RetentionFinalSubmitPage() {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+          {filtered.length > 0 && (
+            <div className="flex items-center justify-between pt-4 flex-wrap gap-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>Rows per page</span>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(val) => {
+                    setPageSize(Number(val));
+                    setCurrentPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[70px] text-xs" data-testid="select-page-size">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 20, 30, 40, 50, 100].map((size) => (
+                      <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="ml-2">
+                  {(safeCurrentPage - 1) * pageSize + 1}–{Math.min(safeCurrentPage * pageSize, filtered.length)} of {filtered.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={safeCurrentPage <= 1}
+                  data-testid="button-first-page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4 -ml-2.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safeCurrentPage <= 1}
+                  data-testid="button-prev-page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground px-2" data-testid="text-page-info">
+                  Page {safeCurrentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safeCurrentPage >= totalPages}
+                  data-testid="button-next-page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={safeCurrentPage >= totalPages}
+                  data-testid="button-last-page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4 -ml-2.5" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>
