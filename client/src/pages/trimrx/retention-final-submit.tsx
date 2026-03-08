@@ -913,7 +913,7 @@ function SlackMessagePanel({
       if (!res.ok) throw new Error("Failed to fetch replies");
       return res.json();
     },
-    enabled: msg.reply_count > 0,
+    enabled: msg.reply_count > 0 || !!lastReply,
     retry: 1,
     staleTime: 30 * 1000,
   });
