@@ -683,7 +683,7 @@ function SlackMessagePanel({
           </Button>
         )}
         <PaymentIntentsButton msg={msg} />
-        {msg.reply_count > 0 && (
+        {(threadReplies ? threadReplies.length > 0 : msg.reply_count > 0) && (
           <Button
             variant="ghost"
             size="sm"
@@ -691,7 +691,7 @@ function SlackMessagePanel({
             data-testid="button-thread-toggle"
           >
             <MessageCircle className="h-3.5 w-3.5 mr-1" />
-            {msg.reply_count} {msg.reply_count === 1 ? "reply" : "replies"}
+            {(() => { const c = threadReplies ? threadReplies.length : msg.reply_count; return `${c} ${c === 1 ? "reply" : "replies"}`; })()}
             {isExpanded ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
           </Button>
         )}
