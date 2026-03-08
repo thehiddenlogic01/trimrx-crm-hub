@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -754,6 +754,9 @@ function SlackMessagePanel({
   );
 }
 
+const persistentSlackCache: Record<string, SlackMessage[] | null> = {};
+const persistentSlackActions: Record<string, SlackActionInfo> = {};
+
 export default function RetentionFinalSubmitPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
@@ -766,10 +769,9 @@ export default function RetentionFinalSubmitPage() {
   });
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const slackCacheRef = useRef<Record<string, SlackMessage[] | null>>({});
-  const [slackCache, setSlackCache] = useState<Record<string, SlackMessage[] | null>>({});
+  const [slackCache, setSlackCache] = useState<Record<string, SlackMessage[] | null>>(persistentSlackCache);
   const [slackLoading, setSlackLoading] = useState<Record<string, boolean>>({});
-  const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>({});
+  const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>(persistentSlackActions);
   const [sheetSending, setSheetSending] = useState<Record<number, boolean>>({});
 
   const { data: allReports, isLoading } = useQuery<CvReport[]>({
@@ -803,82 +805,59 @@ export default function RetentionFinalSubmitPage() {
     }
   }, []);
 
-  const reportIdsKey = readyReports.map((r) => r.id).join(",");
-  useEffect(() => {
-    if (readyReports.length === 0) return;
-    let cancelled = false;
-
-    const fetchLastReply = async (msg: SlackMessage, usersMap: Record<string, SlackUser>): Promise<{ user: string; text: string; ts: string } | null> => {
-      if (!msg.reply_count || msg.reply_count <= 0) return null;
-      try {
-        const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${msg.ts}`);
-        if (!res.ok) return null;
-        const replies: SlackMessage[] = await res.json();
-        const threadReplies = replies.filter((r) => r.ts !== msg.ts);
-        if (threadReplies.length === 0) return null;
-        const last = threadReplies[threadReplies.length - 1];
-        return { user: last.user, text: last.text, ts: last.ts };
-      } catch {
-        return null;
-      }
-    };
-
-    const loadMessages = async () => {
-      for (const report of readyReports) {
-        if (cancelled) break;
-        const key = String(report.id);
-        if (slackCacheRef.current[key] !== undefined) continue;
-        const query = buildSearchQuery(report);
-        if (!query) {
-          slackCacheRef.current[key] = null;
-          setSlackCache((prev) => ({ ...prev, [key]: null }));
-          continue;
-        }
-        try {
-          const msgs = await fetchSlackMessages(report);
-          if (cancelled) break;
-          slackCacheRef.current[key] = msgs;
-          setSlackCache((prev) => ({ ...prev, [key]: msgs }));
-
-          if (msgs && msgs.length > 0) {
-            const firstMsg = msgs[0];
-            const isChecked = msgs.some((m) => hasCheckmark(m.reactions));
-            const lastReply = await fetchLastReply(firstMsg, {});
-            if (cancelled) break;
-            const getUserName = (id: string) => {
-              const cached = queryClient.getQueryData<Record<string, SlackUser>>(["/api/slack/users"]);
-              return cached?.[id]?.real_name || cached?.[id]?.name || id;
-            };
-            setSlackActions((prev) => ({
-              ...prev,
-              [key]: {
-                checked: isChecked,
-                lastReplyUser: lastReply ? getUserName(lastReply.user) : "",
-                lastReplyText: lastReply ? lastReply.text : "",
-                lastReplyTs: lastReply ? lastReply.ts : "",
-              },
-            }));
-          }
-        } catch {
-          slackCacheRef.current[key] = null;
-        }
-        await new Promise((r) => setTimeout(r, 300));
-      }
-    };
-
-    loadMessages();
-    return () => { cancelled = true; };
-  }, [reportIdsKey, fetchSlackMessages]);
-
   const handleSlackClick = async (report: CvReport) => {
     const key = String(report.id);
     setSelectedReport(report);
     setSheetOpen(true);
 
+    if (persistentSlackCache[key] !== undefined) {
+      setSlackCache((prev) => ({ ...prev, [key]: persistentSlackCache[key] }));
+      if (persistentSlackActions[key]) {
+        setSlackActions((prev) => ({ ...prev, [key]: persistentSlackActions[key] }));
+      }
+      return;
+    }
+
     setSlackLoading((prev) => ({ ...prev, [key]: true }));
-    const msgs = await fetchSlackMessages(report);
-    slackCacheRef.current[key] = msgs;
-    setSlackCache((prev) => ({ ...prev, [key]: msgs }));
+    try {
+      const msgs = await fetchSlackMessages(report);
+      persistentSlackCache[key] = msgs;
+      setSlackCache((prev) => ({ ...prev, [key]: msgs }));
+
+      if (msgs && msgs.length > 0) {
+        const firstMsg = msgs[0];
+        const isChecked = msgs.some((m) => hasCheckmark(m.reactions));
+        let lastReply: { user: string; text: string; ts: string } | null = null;
+        if (firstMsg.reply_count && firstMsg.reply_count > 0) {
+          try {
+            const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${firstMsg.ts}`);
+            if (res.ok) {
+              const replies: SlackMessage[] = await res.json();
+              const threadReplies = replies.filter((r) => r.ts !== firstMsg.ts);
+              if (threadReplies.length > 0) {
+                const last = threadReplies[threadReplies.length - 1];
+                lastReply = { user: last.user, text: last.text, ts: last.ts };
+              }
+            }
+          } catch {}
+        }
+        const getUserName = (id: string) => {
+          const cached = queryClient.getQueryData<Record<string, SlackUser>>(["/api/slack/channels", CHANNEL_ID, "users"]);
+          return cached?.[id]?.real_name || cached?.[id]?.name || id;
+        };
+        const actionInfo: SlackActionInfo = {
+          checked: isChecked,
+          lastReplyUser: lastReply ? getUserName(lastReply.user) : "",
+          lastReplyText: lastReply ? lastReply.text : "",
+          lastReplyTs: lastReply ? lastReply.ts : "",
+        };
+        persistentSlackActions[key] = actionInfo;
+        setSlackActions((prev) => ({ ...prev, [key]: actionInfo }));
+      }
+    } catch {
+      persistentSlackCache[key] = null;
+      setSlackCache((prev) => ({ ...prev, [key]: null }));
+    }
     setSlackLoading((prev) => ({ ...prev, [key]: false }));
   };
 
@@ -1251,6 +1230,7 @@ export default function RetentionFinalSubmitPage() {
                       onClose={() => setSheetOpen(false)}
                       onActionUpdate={(info) => {
                         if (selectedKey) {
+                          persistentSlackActions[selectedKey] = info;
                           setSlackActions((prev) => ({ ...prev, [selectedKey]: info }));
                         }
                       }}
