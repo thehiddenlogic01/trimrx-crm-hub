@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -8,6 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ALL_REASONS, REASON_SUBREASON_MAP, ALL_SUB_REASONS, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS } from "@shared/classification";
 import {
   Table,
   TableBody,
@@ -44,7 +52,7 @@ import {
   SendHorizonal, Search, Loader2, ExternalLink, FileSpreadsheet,
   Eye, EyeOff, CheckCircle2, MessageSquare, CheckSquare, XCircle,
   Send, MessageCircle, ChevronUp, ChevronDown, CreditCard, DollarSign,
-  AlertCircle, FileText, CornerDownRight, Undo2, Trash2,
+  AlertCircle, FileText, CornerDownRight, Undo2, Trash2, Check, X,
 } from "lucide-react";
 import type { CvReport } from "@shared/schema";
 
@@ -232,6 +240,203 @@ const COLUMNS = [
 ] as const;
 
 type ColumnKey = typeof COLUMNS[number]["key"];
+
+const PRODUCT_TYPE_OPTIONS = ["1M", "3M Bundle", "6M Bundle", "12M Bundle", "Supplement", "Upsell", "NAD+", "Zofran", "Sermorelin", "Semaglutide", "Tirzepatide"];
+
+const TEXT_EDITABLE_KEYS: ColumnKey[] = ["customerEmail", "name", "notesTrimrx"];
+
+function optimisticUpdate(reportId: number, colKey: ColumnKey, newValue: string) {
+  const prev = queryClient.getQueryData<CvReport[]>(["/api/cv-reports"]);
+  if (prev) {
+    queryClient.setQueryData<CvReport[]>(["/api/cv-reports"],
+      prev.map((r) => r.id === reportId ? { ...r, [colKey]: newValue } : r)
+    );
+  }
+  return prev;
+}
+
+function InlineTextCell({ reportId, colKey, value }: { reportId: number; colKey: ColumnKey; value: string }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (newValue: string) => {
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, { [colKey]: newValue });
+      return await res.json();
+    },
+    onMutate: (newValue: string) => {
+      const prev = optimisticUpdate(reportId, colKey, newValue);
+      setEditing(false);
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  function handleSave() {
+    if (editValue !== value) {
+      updateMutation.mutate(editValue);
+    } else {
+      setEditing(false);
+    }
+  }
+
+  function handleCancel() {
+    setEditValue(value);
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1 min-w-[120px]">
+        <Input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") handleCancel(); }}
+          className="h-6 text-xs px-2 py-0"
+          disabled={updateMutation.isPending}
+          data-testid={`inline-input-${colKey}-${reportId}`}
+        />
+        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleSave} disabled={updateMutation.isPending} data-testid={`inline-save-${colKey}-${reportId}`}>
+          {updateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 text-green-600" />}
+        </Button>
+        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={handleCancel} disabled={updateMutation.isPending} data-testid={`inline-cancel-${colKey}-${reportId}`}>
+          <X className="h-3 w-3 text-destructive" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <span
+      className="cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5 -mx-1 transition-colors inline-block truncate max-w-[180px] text-[13px]"
+      onClick={() => { setEditValue(value); setEditing(true); }}
+      data-testid={`inline-edit-${colKey}-${reportId}`}
+      title={value || "Click to edit"}
+    >
+      {value || "—"}
+    </span>
+  );
+}
+
+function InlineDropdownCell({ reportId, colKey, value, options }: { reportId: number; colKey: ColumnKey; value: string; options: string[] }) {
+  const { toast } = useToast();
+
+  const updateMutation = useMutation({
+    mutationFn: async (newValue: string) => {
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, { [colKey]: newValue });
+      return await res.json();
+    },
+    onMutate: (newValue: string) => {
+      const prev = optimisticUpdate(reportId, colKey, newValue);
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  return (
+    <Select
+      value={value || ""}
+      onValueChange={(val) => {
+        if (val !== value) {
+          updateMutation.mutate(val === "__clear__" ? "" : val);
+        }
+      }}
+    >
+      <SelectTrigger
+        className="h-6 text-xs px-2 py-0 min-w-[100px] border-dashed"
+        data-testid={`select-${colKey}-${reportId}`}
+      >
+        <SelectValue placeholder="—" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__clear__">
+          <span className="text-muted-foreground">Clear</span>
+        </SelectItem>
+        {options.map((opt) => (
+          <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function InlineMultiDropdownCell({ reportId, colKey, value, options }: { reportId: number; colKey: ColumnKey; value: string; options: string[] }) {
+  const { toast } = useToast();
+  const selected = useMemo(() => value ? value.split(",").map((v) => v.trim()).filter(Boolean) : [], [value]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (newValue: string) => {
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, { [colKey]: newValue });
+      return await res.json();
+    },
+    onMutate: (newValue: string) => {
+      const prev = optimisticUpdate(reportId, colKey, newValue);
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  function toggle(opt: string) {
+    const newSelected = selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt];
+    updateMutation.mutate(newSelected.join(", "));
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-6 text-xs px-2 py-0 min-w-[100px] border-dashed justify-start font-normal" data-testid={`multi-select-${colKey}-${reportId}`}>
+          {selected.length > 0 ? (
+            <div className="flex flex-wrap gap-0.5">
+              {selected.map((s) => (
+                <Badge key={s} variant="secondary" className="text-[10px] px-1 py-0 h-4">{s}</Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="start">
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {options.map((opt) => (
+            <label key={opt} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+              <Checkbox checked={selected.includes(opt)} onCheckedChange={() => toggle(opt)} className="h-3.5 w-3.5" />
+              {opt}
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
   const [open, setOpen] = useState(false);
@@ -875,6 +1080,7 @@ function saveSlackAction(key: string, info: SlackActionInfo) {
 
 export default function RetentionFinalSubmitPage() {
   const { toast } = useToast();
+  const { can } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
@@ -1084,6 +1290,8 @@ export default function RetentionFinalSubmitPage() {
       .trim();
   };
 
+  const canQuickEdit = can("retention-final-submit", "quick-edit");
+
   const renderCellContent = (report: CvReport, col: typeof COLUMNS[number]) => {
     if (col.key === "sendToSheet") {
       const sending = sheetSending[report.id];
@@ -1190,6 +1398,58 @@ export default function RetentionFinalSubmitPage() {
     }
 
     const value = (report as any)[col.key] || "";
+
+    if (canQuickEdit && TEXT_EDITABLE_KEYS.includes(col.key)) {
+      return <InlineTextCell reportId={report.id} colKey={col.key} value={value} />;
+    }
+
+    if (col.key === "productType") {
+      if (canQuickEdit) return <InlineMultiDropdownCell reportId={report.id} colKey={col.key} value={value} options={PRODUCT_TYPE_OPTIONS} />;
+      if (value) {
+        const items = value.split(",").map((v: string) => v.trim()).filter(Boolean);
+        return (
+          <div className="flex flex-wrap gap-1">
+            {items.map((item: string, i: number) => (
+              <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">{item}</Badge>
+            ))}
+          </div>
+        );
+      }
+      return <span className="text-muted-foreground text-xs">—</span>;
+    }
+
+    if (col.key === "reason") {
+      if (canQuickEdit) return <InlineDropdownCell reportId={report.id} colKey={col.key} value={value} options={ALL_REASONS} />;
+      return <span className="text-xs">{value || "—"}</span>;
+    }
+
+    if (col.key === "subReason") {
+      const reason = (report as any).reason || "";
+      const opts = reason && REASON_SUBREASON_MAP[reason] ? REASON_SUBREASON_MAP[reason] : ALL_SUB_REASONS;
+      if (canQuickEdit) return <InlineDropdownCell reportId={report.id} colKey={col.key} value={value} options={opts} />;
+      return <span className="text-xs">{value || "—"}</span>;
+    }
+
+    if (col.key === "desiredAction") {
+      if (canQuickEdit) return <InlineDropdownCell reportId={report.id} colKey={col.key} value={value} options={DESIRED_ACTION_OPTIONS} />;
+      return <span className="text-xs">{value || "—"}</span>;
+    }
+
+    if (col.key === "clientThreat") {
+      if (canQuickEdit) return <InlineDropdownCell reportId={report.id} colKey={col.key} value={value} options={CLIENT_THREAT_OPTIONS} />;
+      if (value) {
+        const items = value.split(",").map((v: string) => v.trim()).filter(Boolean);
+        return (
+          <div className="flex flex-wrap gap-1">
+            {items.map((item: string, i: number) => (
+              <Badge key={i} className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-[10px] px-1.5 py-0">{item}</Badge>
+            ))}
+          </div>
+        );
+      }
+      return <span className="text-muted-foreground text-xs">—</span>;
+    }
+
     if (col.key === "link" && value) {
       return (
         <a
@@ -1217,30 +1477,6 @@ export default function RetentionFinalSubmitPage() {
         <span className="text-xs max-w-[120px] block truncate" title={value}>
           {short}
         </span>
-      );
-    }
-    if (col.key === "productType" && value) {
-      const items = value.split(",").map((v: string) => v.trim()).filter(Boolean);
-      return (
-        <div className="flex flex-wrap gap-1">
-          {items.map((item: string, i: number) => (
-            <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
-              {item}
-            </Badge>
-          ))}
-        </div>
-      );
-    }
-    if (col.key === "clientThreat" && value) {
-      const items = value.split(",").map((v: string) => v.trim()).filter(Boolean);
-      return (
-        <div className="flex flex-wrap gap-1">
-          {items.map((item: string, i: number) => (
-            <Badge key={i} className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-[10px] px-1.5 py-0">
-              {item}
-            </Badge>
-          ))}
-        </div>
       );
     }
     if (!value || value === "—") {

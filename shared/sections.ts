@@ -149,6 +149,15 @@ export const APP_FEATURES: PageFeatures[] = [
     ],
   },
   {
+    page: "retention-final-submit",
+    label: "Retention Final Submit",
+    section: "trimrx-cv",
+    route: "/trimrx/retention-final-submit",
+    features: [
+      { key: "quick-edit", label: "Quick Edit Fields (dropdowns & inline editing)" },
+    ],
+  },
+  {
     page: "cv-slack",
     label: "CV Slack",
     section: "trimrx-cv",
