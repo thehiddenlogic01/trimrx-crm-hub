@@ -1097,6 +1097,7 @@ export default function RetentionFinalSubmitPage() {
   const { toast } = useToast();
   const { can } = usePermissions();
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterDate, setFilterDate] = useState<string>("");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
       const saved = localStorage.getItem("retention-final-hidden-columns");
@@ -1284,6 +1285,22 @@ export default function RetentionFinalSubmitPage() {
       if (slackStatusFilter === "__empty__") {
         if (val) return false;
       } else if (val !== slackStatusFilter) return false;
+    }
+    if (filterDate) {
+      const reportDate = (report.date || "").trim();
+      if (!reportDate) return false;
+      const parts = reportDate.replace(/\//g, "-").split("-");
+      let reportYmd = "";
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          reportYmd = `${parts[0]}-${parts[1].padStart(2, "0")}-${parts[2].padStart(2, "0")}`;
+        } else {
+          let year = parts[2];
+          if (year.length === 2) year = (parseInt(year) > 50 ? "19" : "20") + year;
+          reportYmd = `${year}-${parts[0].padStart(2, "0")}-${parts[1].padStart(2, "0")}`;
+        }
+      }
+      if (reportYmd !== filterDate) return false;
     }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -1618,6 +1635,13 @@ export default function RetentionFinalSubmitPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Input
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className={`h-8 w-[150px] text-xs ${filterDate ? "bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300" : ""}`}
+                data-testid="input-filter-date"
+              />
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
