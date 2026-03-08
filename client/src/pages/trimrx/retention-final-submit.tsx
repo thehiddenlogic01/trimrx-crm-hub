@@ -1393,10 +1393,16 @@ export default function RetentionFinalSubmitPage() {
 
   const filtered = readyReports.filter((report) => {
     if (slackStatusFilter) {
-      const val = (report as any).slackStatusRt || "";
-      if (slackStatusFilter === "__empty__") {
-        if (val) return false;
-      } else if (val !== slackStatusFilter) return false;
+      if (slackStatusFilter === "__send_pending__") {
+        if (report.sentToSheet === "yes") return false;
+      } else if (slackStatusFilter === "__added_successfully__") {
+        if (report.sentToSheet !== "yes") return false;
+      } else {
+        const val = (report as any).slackStatusRt || "";
+        if (slackStatusFilter === "__empty__") {
+          if (val) return false;
+        } else if (val !== slackStatusFilter) return false;
+      }
     }
     if (filterDate) {
       const reportDate = (report.date || "").trim();
@@ -1747,6 +1753,8 @@ export default function RetentionFinalSubmitPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All Slack Status (RT)</SelectItem>
+                  <SelectItem value="__send_pending__">Send Pending</SelectItem>
+                  <SelectItem value="__added_successfully__">Added Successfully</SelectItem>
                   <SelectItem value="__empty__">Not Set</SelectItem>
                   {SLACK_STATUS_RT_OPTIONS.map((opt) => (
                     <SelectItem key={opt} value={opt}>{opt}</SelectItem>
