@@ -808,6 +808,21 @@ export default function RetentionFinalSubmitPage() {
     if (readyReports.length === 0) return;
     let cancelled = false;
 
+    const fetchLastReply = async (msg: SlackMessage, usersMap: Record<string, SlackUser>): Promise<{ user: string; text: string; ts: string } | null> => {
+      if (!msg.reply_count || msg.reply_count <= 0) return null;
+      try {
+        const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${msg.ts}`);
+        if (!res.ok) return null;
+        const replies: SlackMessage[] = await res.json();
+        const threadReplies = replies.filter((r) => r.ts !== msg.ts);
+        if (threadReplies.length === 0) return null;
+        const last = threadReplies[threadReplies.length - 1];
+        return { user: last.user, text: last.text, ts: last.ts };
+      } catch {
+        return null;
+      }
+    };
+
     const loadMessages = async () => {
       for (const report of readyReports) {
         if (cancelled) break;
@@ -824,10 +839,30 @@ export default function RetentionFinalSubmitPage() {
           if (cancelled) break;
           slackCacheRef.current[key] = msgs;
           setSlackCache((prev) => ({ ...prev, [key]: msgs }));
+
+          if (msgs && msgs.length > 0) {
+            const firstMsg = msgs[0];
+            const isChecked = msgs.some((m) => hasCheckmark(m.reactions));
+            const lastReply = await fetchLastReply(firstMsg, {});
+            if (cancelled) break;
+            const getUserName = (id: string) => {
+              const cached = queryClient.getQueryData<Record<string, SlackUser>>(["/api/slack/users"]);
+              return cached?.[id]?.real_name || cached?.[id]?.name || id;
+            };
+            setSlackActions((prev) => ({
+              ...prev,
+              [key]: {
+                checked: isChecked,
+                lastReplyUser: lastReply ? getUserName(lastReply.user) : "",
+                lastReplyText: lastReply ? lastReply.text : "",
+                lastReplyTs: lastReply ? lastReply.ts : "",
+              },
+            }));
+          }
         } catch {
           slackCacheRef.current[key] = null;
         }
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 300));
       }
     };
 
