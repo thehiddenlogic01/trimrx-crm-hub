@@ -52,6 +52,7 @@ const COLUMNS = [
   { key: "name", label: "Name" },
   { key: "notesTrimrx", label: "Notes TrimRX" },
   { key: "productType", label: "Product Type" },
+  { key: "slackStatusRt", label: "Slack Status (RT)" },
   { key: "clientThreat", label: "Client Threat" },
   { key: "reason", label: "Reason" },
   { key: "subReason", label: "Sub-reason" },
@@ -65,6 +66,7 @@ type ColumnKey = typeof COLUMNS[number]["key"];
 const INLINE_EDITABLE_KEYS: ColumnKey[] = ["name", "customerEmail", "date"];
 
 const PRODUCT_TYPE_OPTIONS = ["1M", "3M Bundle", "6M Bundle", "12M Bundle", "Supplement", "Upsell", "NAD+", "Zofran", "Sermorelin", "Semaglutide", "Tirzepatide"];
+const SLACK_STATUS_RT_OPTIONS = ["Send", "Managed by K/E"];
 
 const emptyForm: Record<ColumnKey, string> = {
   submittedBy: "",
@@ -78,6 +80,7 @@ const emptyForm: Record<ColumnKey, string> = {
   name: "",
   notesTrimrx: "",
   productType: "",
+  slackStatusRt: "",
   clientThreat: "",
   reason: "",
   subReason: "",
@@ -729,6 +732,9 @@ export default function CvReportPage() {
   const [filterCheckingStatus, setFilterCheckingStatus] = useState<string>(() => {
     try { return localStorage.getItem("cv-report-filterCheckingStatus") || "all"; } catch { return "all"; }
   });
+  const [filterSlackStatusRt, setFilterSlackStatusRt] = useState<string>(() => {
+    try { return localStorage.getItem("cv-report-filterSlackStatusRt") || "all"; } catch { return "all"; }
+  });
   const [fetchingCaseData, setFetchingCaseData] = useState(false);
   const [reanalyzing, setReanalyzing] = useState(false);
   const [reanalyzeProgress, setReanalyzeProgress] = useState({ done: 0, total: 0 });
@@ -771,6 +777,7 @@ export default function CvReportPage() {
   useEffect(() => { localStorage.setItem("cv-report-filterCheckingStatus", filterCheckingStatus); }, [filterCheckingStatus]);
   useEffect(() => { localStorage.setItem("cv-report-filterBrokenLinks", String(filterBrokenLinks)); }, [filterBrokenLinks]);
   useEffect(() => { localStorage.setItem("cv-report-filterAssignedTo", filterAssignedTo); }, [filterAssignedTo]);
+  useEffect(() => { localStorage.setItem("cv-report-filterSlackStatusRt", filterSlackStatusRt); }, [filterSlackStatusRt]);
 
   useEffect(() => {
     if (!activeTaskId) return;
@@ -1187,6 +1194,10 @@ export default function CvReportPage() {
       return canAllEdit ? <InlineSelectCell reportId={report.id} colKey={col.key} value={value} options={DESIRED_ACTION_OPTIONS} /> : <span>{value}</span>;
     }
 
+    if (col.key === "slackStatusRt") {
+      return canAllEdit ? <InlineSelectCell reportId={report.id} colKey={col.key} value={value} options={SLACK_STATUS_RT_OPTIONS} /> : <span>{value || "—"}</span>;
+    }
+
     if (col.key === "clientThreat") {
       return canAllEdit ? <InlineSelectCell reportId={report.id} colKey={col.key} value={value} options={CLIENT_THREAT_OPTIONS} /> : <span>{value}</span>;
     }
@@ -1482,6 +1493,24 @@ export default function CvReportPage() {
               <SelectContent>
                 <SelectItem value="all">All Checking</SelectItem>
                 {CHECKING_STATUS_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={filterSlackStatusRt}
+              onValueChange={(val) => {
+                setFilterSlackStatusRt(val);
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className={`h-7 w-[170px] text-xs ${filterSlackStatusRt !== "all" ? "bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-950 dark:border-orange-800 dark:text-orange-300" : ""}`} data-testid="select-filter-slack-status-rt">
+                <SelectValue placeholder="Slack Status (RT)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Slack Status (RT)</SelectItem>
+                <SelectItem value="__empty__">Not Set</SelectItem>
+                {SLACK_STATUS_RT_OPTIONS.map((s) => (
                   <SelectItem key={s} value={s}>{s}</SelectItem>
                 ))}
               </SelectContent>
@@ -2004,6 +2033,11 @@ export default function CvReportPage() {
                 }
                 if (filterStatuses.length > 0 && !filterStatuses.includes(report.status || "")) return false;
                 if (filterCheckingStatus !== "all" && (report.checkingStatus || "Need Check") !== filterCheckingStatus) return false;
+                if (filterSlackStatusRt !== "all") {
+                  const val = (report as any).slackStatusRt || "";
+                  if (filterSlackStatusRt === "__empty__") { if (val) return false; }
+                  else if (val !== filterSlackStatusRt) return false;
+                }
                 if (filterAssignedTo === "unassigned" && report.assignedTo) return false;
                 if (filterAssignedTo !== "all" && filterAssignedTo !== "unassigned" && report.assignedTo !== filterAssignedTo) return false;
                 if (filterDate) {
