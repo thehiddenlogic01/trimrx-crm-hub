@@ -1132,14 +1132,14 @@ export default function RetentionFinalSubmitPage() {
       const action = slackActions[key];
       const cached = slackCache[key];
 
-      if (!cached && cached !== null) {
+      if (!action && !cached) {
         return <span className="text-muted-foreground text-xs">—</span>;
       }
-      if (cached === null) {
+      if (!action && cached === null) {
         return <span className="text-muted-foreground text-xs">—</span>;
       }
 
-      const isChecked = action?.checked ?? cached.some((m) => hasCheckmark(m.reactions));
+      const isChecked = action?.checked ?? (cached ? cached.some((m) => hasCheckmark(m.reactions)) : false);
       const replyText = action?.lastReplyText ? cleanSlackActionText(action.lastReplyText) : "";
       const replyUser = action?.lastReplyUser || "";
 
