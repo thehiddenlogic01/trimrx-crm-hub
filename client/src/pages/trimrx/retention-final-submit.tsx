@@ -838,8 +838,6 @@ export default function RetentionFinalSubmitPage() {
     setSelectedReport(report);
     setSheetOpen(true);
 
-    if (slackCache[key] && slackCache[key] !== null) return;
-
     setSlackLoading((prev) => ({ ...prev, [key]: true }));
     const msg = await fetchSlackMessage(report);
     slackCacheRef.current[key] = msg;
