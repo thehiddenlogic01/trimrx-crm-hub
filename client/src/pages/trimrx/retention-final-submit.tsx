@@ -45,6 +45,7 @@ import {
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1482,11 +1483,18 @@ export default function RetentionFinalSubmitPage() {
         </a>
       );
     }
-    if (col.key === "notesTrimrx" && value) {
+    if (col.key === "notesTrimrx") {
       return (
-        <span className="text-xs max-w-[200px] block truncate" title={value}>
-          {value}
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs max-w-[200px] block truncate cursor-default" data-testid={`notes-hover-${report.id}`}>{value || "—"}</span>
+          </TooltipTrigger>
+          {value && (
+            <TooltipContent side="bottom" align="start" className="max-w-[350px] whitespace-pre-wrap text-xs leading-relaxed bg-amber-50 text-amber-950 border border-amber-300 shadow-md p-3 rounded-md dark:bg-amber-950 dark:text-amber-100 dark:border-amber-700">
+              <p>{value}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
       );
     }
     if (col.key === "status" && value) {
@@ -1508,7 +1516,8 @@ export default function RetentionFinalSubmitPage() {
   const selectedSlackLoading = selectedKey ? slackLoading[selectedKey] : false;
 
   return (
-    <div className="space-y-6 max-w-full">
+    <TooltipProvider delayDuration={300}>
+      <div className="space-y-6 max-w-full">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-foreground" data-testid="text-page-title">
           Retention Final Submit
@@ -1778,6 +1787,7 @@ export default function RetentionFinalSubmitPage() {
           </div>
         </SheetContent>
       </Sheet>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

@@ -1306,17 +1306,16 @@ export default function CvReportPage() {
 
     if (col.key === "notesTrimrx") {
       return (
-        <Dialog>
-          <DialogTrigger asChild>
-            <span className="truncate block max-w-[200px] cursor-pointer hover:text-primary transition-colors" title={value} data-testid={`notes-expand-${report.id}`}>{value}</span>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
-            <DialogHeader>
-              <DialogTitle className="text-sm font-semibold">Notes — {report.name || report.caseId}</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground mt-2">{value}</p>
-          </DialogContent>
-        </Dialog>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="truncate block max-w-[200px] cursor-default" data-testid={`notes-expand-${report.id}`}>{value || "—"}</span>
+          </TooltipTrigger>
+          {value && (
+            <TooltipContent side="bottom" align="start" className="max-w-[350px] whitespace-pre-wrap text-xs leading-relaxed bg-amber-50 text-amber-950 border border-amber-300 shadow-md p-3 rounded-md dark:bg-amber-950 dark:text-amber-100 dark:border-amber-700">
+              <p>{value}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
       );
     }
 
