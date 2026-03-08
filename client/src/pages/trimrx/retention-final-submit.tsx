@@ -325,16 +325,28 @@ function InlineTextCell({ reportId, colKey, value }: { reportId: number; colKey:
     );
   }
 
-  return (
+  const displaySpan = (
     <span
       className="cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5 -mx-1 transition-colors inline-block truncate max-w-[180px] text-[13px]"
       onClick={() => { setEditValue(value); setEditing(true); }}
       data-testid={`inline-edit-${colKey}-${reportId}`}
-      title={value || "Click to edit"}
     >
       {value || "—"}
     </span>
   );
+
+  if (colKey === "notesTrimrx" && value) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{displaySpan}</TooltipTrigger>
+        <TooltipContent side="bottom" align="start" className="max-w-[350px] whitespace-pre-wrap text-xs leading-relaxed bg-amber-50 text-amber-950 border border-amber-300 shadow-md p-3 rounded-md dark:bg-amber-950 dark:text-amber-100 dark:border-amber-700">
+          <p>{value}</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return displaySpan;
 }
 
 function InlineDropdownCell({ reportId, colKey, value, options }: { reportId: number; colKey: ColumnKey; value: string; options: string[] }) {
