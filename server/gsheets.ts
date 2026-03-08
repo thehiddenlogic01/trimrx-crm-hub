@@ -144,11 +144,16 @@ export function setupGSheetsRoutes(app: Express) {
 
       const maxColIndex = Math.max(...sortedMappings.map(([, col]) => columnLetterToIndex(col)));
 
+      const DATE_LIKE = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
       const rows = selectedReports.map((report) => {
         const row: (string | number)[] = new Array(maxColIndex + 1).fill("");
         for (const [field, col] of sortedMappings) {
           const idx = columnLetterToIndex(col);
-          row[idx] = (report as any)[field] || "";
+          let val = (report as any)[field] || "";
+          if (typeof val === "string" && DATE_LIKE.test(val.trim())) {
+            val = "'" + val.trim();
+          }
+          row[idx] = val;
         }
         return row;
       });
