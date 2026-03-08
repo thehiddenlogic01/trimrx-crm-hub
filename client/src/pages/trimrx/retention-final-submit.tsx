@@ -172,13 +172,12 @@ function hasCheckmark(reactions: { name: string }[]) {
 }
 
 function buildSearchQuery(report: CvReport): string {
-  const parts: string[] = [];
-  if (report.caseId) parts.push(report.caseId);
   if (report.link) {
     const uuidMatch = report.link.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-    if (uuidMatch) parts.push(uuidMatch[1]);
+    if (uuidMatch) return uuidMatch[1];
   }
-  return parts.join("|");
+  if (report.caseId) return report.caseId;
+  return "";
 }
 
 function extractCaseFromSlackMsg(text: string) {
@@ -765,8 +764,8 @@ export default function RetentionFinalSubmitPage() {
   });
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const slackCacheRef = useRef<Record<string, SlackMessage | null>>({});
-  const [slackCache, setSlackCache] = useState<Record<string, SlackMessage | null>>({});
+  const slackCacheRef = useRef<Record<string, SlackMessage[] | null>>({});
+  const [slackCache, setSlackCache] = useState<Record<string, SlackMessage[] | null>>({});
   const [slackLoading, setSlackLoading] = useState<Record<string, boolean>>({});
   const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>({});
 
@@ -786,7 +785,7 @@ export default function RetentionFinalSubmitPage() {
 
   const readyReports = (allReports || []).filter((r) => r.checkingStatus === "Ready");
 
-  const fetchSlackMessage = useCallback(async (report: CvReport): Promise<SlackMessage | null> => {
+  const fetchSlackMessages = useCallback(async (report: CvReport): Promise<SlackMessage[] | null> => {
     const query = buildSearchQuery(report);
     if (!query) return null;
     try {
@@ -794,7 +793,7 @@ export default function RetentionFinalSubmitPage() {
       if (!res.ok) return null;
       const data = await res.json();
       const messages: SlackMessage[] = Array.isArray(data) ? data : (data.messages || []);
-      if (messages.length > 0) return messages[0];
+      if (messages.length > 0) return messages;
       return null;
     } catch {
       return null;
@@ -818,10 +817,10 @@ export default function RetentionFinalSubmitPage() {
           continue;
         }
         try {
-          const msg = await fetchSlackMessage(report);
+          const msgs = await fetchSlackMessages(report);
           if (cancelled) break;
-          slackCacheRef.current[key] = msg;
-          setSlackCache((prev) => ({ ...prev, [key]: msg }));
+          slackCacheRef.current[key] = msgs;
+          setSlackCache((prev) => ({ ...prev, [key]: msgs }));
         } catch {
           slackCacheRef.current[key] = null;
         }
@@ -831,7 +830,7 @@ export default function RetentionFinalSubmitPage() {
 
     loadMessages();
     return () => { cancelled = true; };
-  }, [reportIdsKey, fetchSlackMessage]);
+  }, [reportIdsKey, fetchSlackMessages]);
 
   const handleSlackClick = async (report: CvReport) => {
     const key = String(report.id);
@@ -839,9 +838,9 @@ export default function RetentionFinalSubmitPage() {
     setSheetOpen(true);
 
     setSlackLoading((prev) => ({ ...prev, [key]: true }));
-    const msg = await fetchSlackMessage(report);
-    slackCacheRef.current[key] = msg;
-    setSlackCache((prev) => ({ ...prev, [key]: msg }));
+    const msgs = await fetchSlackMessages(report);
+    slackCacheRef.current[key] = msgs;
+    setSlackCache((prev) => ({ ...prev, [key]: msgs }));
     setSlackLoading((prev) => ({ ...prev, [key]: false }));
   };
 
@@ -890,7 +889,7 @@ export default function RetentionFinalSubmitPage() {
         return <span className="text-muted-foreground text-xs">—</span>;
       }
 
-      const isChecked = action?.checked ?? hasCheckmark(cached.reactions);
+      const isChecked = action?.checked ?? cached.some((m) => hasCheckmark(m.reactions));
       const replyText = action?.lastReplyText ? cleanSlackActionText(action.lastReplyText) : "";
       const replyUser = action?.lastReplyUser || "";
 
@@ -1145,17 +1144,29 @@ export default function RetentionFinalSubmitPage() {
                 <Loader2 className="h-8 w-8 animate-spin mb-3" />
                 <p className="text-sm">Searching Slack...</p>
               </div>
-            ) : selectedSlackMsg ? (
-              <SlackMessagePanel
-                msg={selectedSlackMsg}
-                users={slackUsers || {}}
-                onClose={() => setSheetOpen(false)}
-                onActionUpdate={(info) => {
-                  if (selectedKey) {
-                    setSlackActions((prev) => ({ ...prev, [selectedKey]: info }));
-                  }
-                }}
-              />
+            ) : selectedSlackMsg && selectedSlackMsg.length > 0 ? (
+              <div className="space-y-6">
+                {selectedSlackMsg.length > 1 && (
+                  <div className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-1.5">
+                    {selectedSlackMsg.length} messages found for this case
+                  </div>
+                )}
+                {selectedSlackMsg.map((m, idx) => (
+                  <div key={m.ts}>
+                    {idx > 0 && <div className="border-t my-4" />}
+                    <SlackMessagePanel
+                      msg={m}
+                      users={slackUsers || {}}
+                      onClose={() => setSheetOpen(false)}
+                      onActionUpdate={(info) => {
+                        if (selectedKey) {
+                          setSlackActions((prev) => ({ ...prev, [selectedKey]: info }));
+                        }
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : selectedKey && slackCache[selectedKey] === null ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <MessageSquare className="h-12 w-12 mb-4 opacity-30" />
