@@ -37,6 +37,20 @@ async function buildAll() {
   console.log("pushing database schema...");
   try {
     execSync("npx drizzle-kit push --force", { stdio: "inherit" });
+    execSync(`node -e "
+      const { Pool } = require('pg');
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      pool.query(\\\`
+        CREATE TABLE IF NOT EXISTS session (
+          sid varchar NOT NULL COLLATE \\\"default\\\",
+          sess json NOT NULL,
+          expire timestamp(6) NOT NULL,
+          CONSTRAINT session_pkey PRIMARY KEY (sid)
+        );
+        CREATE INDEX IF NOT EXISTS IDX_session_expire ON session (expire);
+      \\\`).then(() => { console.log('session table ensured'); pool.end(); })
+        .catch(e => { console.warn('session table warning:', e.message); pool.end(); });
+    "`, { stdio: "inherit" });
   } catch (e) {
     console.warn("db:push warning:", e);
   }
