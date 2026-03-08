@@ -38,6 +38,7 @@ export const cvReports = pgTable("cv_reports", {
   submittedBy: text("submitted_by").default(""),
   assignedTo: text("assigned_to").default(""),
   sentToSheet: text("sent_to_sheet").default(""),
+  slackStatusRt: text("slack_status_rt").default(""),
 });
 
 export const insertCvReportSchema = createInsertSchema(cvReports).omit({ id: true });

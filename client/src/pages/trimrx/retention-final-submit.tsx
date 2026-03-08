@@ -233,6 +233,7 @@ const COLUMNS = [
   { key: "notesTrimrx", label: "Notes TrimRX" },
   { key: "slackUpdate", label: "Slack Update" },
   { key: "productType", label: "Product Type" },
+  { key: "slackStatusRt", label: "Slack Status (RT)" },
   { key: "clientThreat", label: "Client Threat" },
   { key: "reason", label: "Reason" },
   { key: "subReason", label: "Sub-reason" },
@@ -242,6 +243,7 @@ const COLUMNS = [
 type ColumnKey = typeof COLUMNS[number]["key"];
 
 const PRODUCT_TYPE_OPTIONS = ["1M", "3M Bundle", "6M Bundle", "12M Bundle", "Supplement", "Upsell", "NAD+", "Zofran", "Sermorelin", "Semaglutide", "Tirzepatide"];
+const SLACK_STATUS_RT_OPTIONS = ["Send", "Managed by K/E"];
 
 const TEXT_EDITABLE_KEYS: ColumnKey[] = ["customerEmail", "name", "notesTrimrx"];
 
@@ -1089,6 +1091,11 @@ export default function RetentionFinalSubmitPage() {
     } catch {}
     return new Set<ColumnKey>();
   });
+  const [slackStatusFilter, setSlackStatusFilter] = useState<string>(() => {
+    try {
+      return localStorage.getItem("retention-slack-status-filter") || "";
+    } catch { return ""; }
+  });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -1259,6 +1266,12 @@ export default function RetentionFinalSubmitPage() {
   };
 
   const filtered = readyReports.filter((report) => {
+    if (slackStatusFilter) {
+      const val = (report as any).slackStatusRt || "";
+      if (slackStatusFilter === "__empty__") {
+        if (val) return false;
+      } else if (val !== slackStatusFilter) return false;
+    }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return COLUMNS.some((col) => {
@@ -1435,6 +1448,11 @@ export default function RetentionFinalSubmitPage() {
       return <span className="text-xs">{value || "—"}</span>;
     }
 
+    if (col.key === "slackStatusRt") {
+      if (canQuickEdit) return <InlineDropdownCell reportId={report.id} colKey={col.key} value={value} options={SLACK_STATUS_RT_OPTIONS} />;
+      return <span className="text-xs">{value || "—"}</span>;
+    }
+
     if (col.key === "clientThreat") {
       if (canQuickEdit) return <InlineDropdownCell reportId={report.id} colKey={col.key} value={value} options={CLIENT_THREAT_OPTIONS} />;
       if (value) {
@@ -1560,6 +1578,25 @@ export default function RetentionFinalSubmitPage() {
                   })()}
                 </>
               )}
+              <Select
+                value={slackStatusFilter}
+                onValueChange={(val) => {
+                  const v = val === "__all__" ? "" : val;
+                  setSlackStatusFilter(v);
+                  try { localStorage.setItem("retention-slack-status-filter", v); } catch {}
+                }}
+              >
+                <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="filter-slack-status-rt">
+                  <SelectValue placeholder="All Slack Status (RT)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Slack Status (RT)</SelectItem>
+                  <SelectItem value="__empty__">Not Set</SelectItem>
+                  {SLACK_STATUS_RT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
