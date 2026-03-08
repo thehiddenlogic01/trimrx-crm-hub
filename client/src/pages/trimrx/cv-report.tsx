@@ -824,9 +824,14 @@ export default function CvReportPage() {
   const isAdmin = user?.role === "admin";
   const [cvTokenInput, setCvTokenInput] = useState("");
   const [filterAssignedTo, setFilterAssignedTo] = useState<string>(() => {
-    if (isEditor && user?.username) return user.username;
+    if (!isAdmin && user?.username) return user.username;
     try { return localStorage.getItem("cv-report-filterAssignedTo") || "all"; } catch { return "all"; }
   });
+  useEffect(() => {
+    if (user && !isAdmin && user.username) {
+      setFilterAssignedTo(user.username);
+    }
+  }, [user, isAdmin]);
   const [filterDate, setFilterDate] = useState<string>("");
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
@@ -1592,7 +1597,7 @@ export default function CvReportPage() {
                 ))}
               </SelectContent>
             </Select>
-            {isEditor ? (
+            {!isAdmin ? (
               <div className="h-7 px-3 flex items-center text-xs border rounded-md bg-muted/50 text-muted-foreground" data-testid="badge-editor-filter">
                 {user?.username || "My Reports"}
               </div>
@@ -2149,8 +2154,9 @@ export default function CvReportPage() {
                   if (filterSlackStatusRt === "__empty__") { if (val) return false; }
                   else if (val !== filterSlackStatusRt) return false;
                 }
-                if (filterAssignedTo === "unassigned" && report.assignedTo) return false;
-                if (filterAssignedTo !== "all" && filterAssignedTo !== "unassigned" && report.assignedTo !== filterAssignedTo) return false;
+                const effectiveAssignedTo = (!isAdmin && user?.username) ? user.username : filterAssignedTo;
+                if (effectiveAssignedTo === "unassigned" && report.assignedTo) return false;
+                if (effectiveAssignedTo !== "all" && effectiveAssignedTo !== "unassigned" && report.assignedTo !== effectiveAssignedTo) return false;
                 if (filterDate) {
                   const reportDate = (report.date || "").trim();
                   if (!reportDate) return false;

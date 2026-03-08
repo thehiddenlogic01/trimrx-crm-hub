@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -1196,6 +1197,8 @@ function saveSlackAction(key: string, info: SlackActionInfo) {
 export default function RetentionFinalSubmitPage() {
   const { toast } = useToast();
   const { can } = usePermissions();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { data: slackStatusRtSettings } = useQuery<string[]>({
     queryKey: ["/api/cv-settings", "slack_status_rt_options"],
     queryFn: async () => {
@@ -1223,10 +1226,16 @@ export default function RetentionFinalSubmitPage() {
     } catch { return ""; }
   });
   const [filterAssignedTo, setFilterAssignedTo] = useState<string>(() => {
+    if (!isAdmin && user?.username) return user.username;
     try {
       return localStorage.getItem("retention-filter-assigned-to") || "all";
     } catch { return "all"; }
   });
+  useEffect(() => {
+    if (user && !isAdmin && user.username) {
+      setFilterAssignedTo(user.username);
+    }
+  }, [user, isAdmin]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -1429,10 +1438,11 @@ export default function RetentionFinalSubmitPage() {
       }
       if (reportYmd !== filterDate) return false;
     }
-    if (filterAssignedTo !== "all") {
-      if (filterAssignedTo === "unassigned") {
+    const effectiveAssignedTo = (!isAdmin && user?.username) ? user.username : filterAssignedTo;
+    if (effectiveAssignedTo !== "all") {
+      if (effectiveAssignedTo === "unassigned") {
         if (report.assignedTo) return false;
-      } else if (report.assignedTo !== filterAssignedTo) return false;
+      } else if (report.assignedTo !== effectiveAssignedTo) return false;
     }
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -1775,25 +1785,31 @@ export default function RetentionFinalSubmitPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select
-                value={filterAssignedTo}
-                onValueChange={(val) => {
-                  setFilterAssignedTo(val);
-                  setCurrentPage(1);
-                  try { localStorage.setItem("retention-filter-assigned-to", val); } catch {}
-                }}
-              >
-                <SelectTrigger className={`h-8 text-xs w-[150px] ${filterAssignedTo !== "all" ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-300" : ""}`} data-testid="filter-assigned-to">
-                  <SelectValue placeholder="All Users" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Users</SelectItem>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {(crmUsers || []).map((u) => (
-                    <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {!isAdmin ? (
+                <div className="h-8 px-3 flex items-center text-xs border rounded-md bg-muted/50 text-muted-foreground" data-testid="badge-user-filter">
+                  {user?.username || "My Reports"}
+                </div>
+              ) : (
+                <Select
+                  value={filterAssignedTo}
+                  onValueChange={(val) => {
+                    setFilterAssignedTo(val);
+                    setCurrentPage(1);
+                    try { localStorage.setItem("retention-filter-assigned-to", val); } catch {}
+                  }}
+                >
+                  <SelectTrigger className={`h-8 text-xs w-[150px] ${filterAssignedTo !== "all" ? "bg-green-50 border-green-200 text-green-700 dark:bg-green-950 dark:border-green-800 dark:text-green-300" : ""}`} data-testid="filter-assigned-to">
+                    <SelectValue placeholder="All Users" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Users</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {(crmUsers || []).map((u) => (
+                      <SelectItem key={u.id} value={u.username}>{u.username}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Input
                 type="date"
                 value={filterDate}
