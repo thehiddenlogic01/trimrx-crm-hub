@@ -910,6 +910,24 @@ export default function CvReportPage() {
     },
   });
 
+  const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
+  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
+  const deleteAllMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", "/api/cv-reports");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+      setSelectedIds(new Set());
+      setDeleteAllConfirmOpen(false);
+      setDeleteAllConfirmText("");
+      toast({ title: "All reports deleted" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete all", description: err.message, variant: "destructive" });
+    },
+  });
+
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importRows, setImportRows] = useState<Record<string, string>[]>([]);
   const [importErrors, setImportErrors] = useState<Record<number, string>>({});
@@ -1703,9 +1721,55 @@ export default function CvReportPage() {
                     <Upload className="h-4 w-4" />
                     Import
                   </button>
+                  {can("cv-report", "delete") && (
+                    <>
+                      <div className="border-t my-1" />
+                      <button
+                        className="w-full flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-accent transition-colors text-destructive"
+                        data-testid="button-delete-all"
+                        onClick={() => { setDeleteAllConfirmOpen(true); setDeleteAllConfirmText(""); }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete All
+                      </button>
+                    </>
+                  )}
                 </div>
               </PopoverContent>
             </Popover>
+          <Dialog open={deleteAllConfirmOpen} onOpenChange={(open) => { setDeleteAllConfirmOpen(open); if (!open) setDeleteAllConfirmText(""); }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-destructive">Delete All Reports</DialogTitle>
+                <DialogDescription>
+                  This will permanently delete <strong>ALL</strong> CV reports. This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 py-2">
+                <p className="text-sm text-muted-foreground">Type <strong>DELETE ALL</strong> to confirm:</p>
+                <Input
+                  data-testid="input-delete-all-confirm"
+                  value={deleteAllConfirmText}
+                  onChange={(e) => setDeleteAllConfirmText(e.target.value)}
+                  placeholder="Type DELETE ALL"
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setDeleteAllConfirmOpen(false); setDeleteAllConfirmText(""); }}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  data-testid="button-confirm-delete-all"
+                  disabled={deleteAllConfirmText !== "DELETE ALL" || deleteAllMutation.isPending}
+                  onClick={() => deleteAllMutation.mutate()}
+                >
+                  {deleteAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Delete All Reports
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             {can("cv-report", "add") && (
               <DialogTrigger asChild>

@@ -629,6 +629,15 @@ export function setupCvReportRoutes(app: Express) {
     }
   });
 
+  app.delete("/api/cv-reports", async (_req, res) => {
+    try {
+      await storage.deleteAllCvReports();
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to delete all" });
+    }
+  });
+
   app.delete("/api/cv-reports/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
