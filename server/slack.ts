@@ -684,18 +684,7 @@ export function setupSlackRoutes(app: Express) {
           });
           const matches = (searchResult as any).messages?.matches || [];
 
-          const cachedByTs: Record<string, any> = {};
-          const cached = channelCache[channelId];
-          if (cached && (Date.now() - cached.fetchedAt) < CACHE_TTL) {
-            for (const cm of cached.messages) {
-              cachedByTs[cm.ts] = cm;
-            }
-          }
-
-          const needFetch: string[] = [];
-          for (const m of matches) {
-            if (!cachedByTs[m.ts]) needFetch.push(m.ts);
-          }
+          const needFetch = matches.map((m: any) => m.ts as string);
 
           const fetchedByTs: Record<string, any> = {};
           const ENRICH_BATCH = 5;
@@ -719,7 +708,7 @@ export function setupSlackRoutes(app: Express) {
             }
           }
 
-          const allByTs = { ...cachedByTs, ...fetchedByTs };
+          const allByTs = { ...fetchedByTs };
           const parentTsToFetch: string[] = [];
           for (const m of matches) {
             if (m.thread_ts && m.thread_ts !== m.ts) {

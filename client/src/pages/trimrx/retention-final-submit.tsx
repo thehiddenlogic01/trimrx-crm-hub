@@ -495,6 +495,10 @@ function SlackMessagePanel({
   const [localChecked, setLocalChecked] = useState(checked);
   const [lastReply, setLastReply] = useState<{ user: string; text: string; ts: string } | null>(null);
 
+  useEffect(() => {
+    setLocalChecked(checked);
+  }, [checked]);
+
   const localReactions = useMemo(() => {
     const orig = msg.reactions || [];
     if (localChecked === checked) return orig;
@@ -812,12 +816,11 @@ export default function RetentionFinalSubmitPage() {
     setSelectedReport(report);
     setSheetOpen(true);
 
-    if (persistentSlackCache[key] !== undefined) {
+    if (persistentSlackCache[key] !== undefined && persistentSlackCache[key] !== null) {
       setSlackCache((prev) => ({ ...prev, [key]: persistentSlackCache[key] }));
       if (persistentSlackActions[key]) {
         setSlackActions((prev) => ({ ...prev, [key]: persistentSlackActions[key] }));
       }
-      return;
     }
 
     setSlackLoading((prev) => ({ ...prev, [key]: true }));
@@ -855,6 +858,8 @@ export default function RetentionFinalSubmitPage() {
         };
         persistentSlackActions[key] = actionInfo;
         setSlackActions((prev) => ({ ...prev, [key]: actionInfo }));
+      } else if (msgs === null) {
+        persistentSlackCache[key] = null;
       }
     } catch {
       persistentSlackCache[key] = null;
@@ -1344,7 +1349,7 @@ export default function RetentionFinalSubmitPage() {
           </SheetHeader>
 
           <div className="mt-6">
-            {selectedSlackLoading ? (
+            {selectedSlackLoading && !selectedSlackMsg ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin mb-3" />
                 <p className="text-sm">Searching Slack...</p>
