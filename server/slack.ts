@@ -588,6 +588,42 @@ export function setupSlackRoutes(app: Express) {
   let usersCache: { data: Record<string, { name: string; avatar: string; real_name: string; display_name: string }>; fetchedAt: number } | null = null;
   const USERS_CACHE_TTL = 30 * 60 * 1000;
 
+  app.post("/api/slack/users/resolve", async (req, res) => {
+    const client = await requireSlack(req, res);
+    if (!client) return;
+    try {
+      const { userIds } = req.body;
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        return res.json({});
+      }
+      const resolved: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
+      for (const userId of userIds.slice(0, 50)) {
+        if (usersCache?.data[userId]) {
+          resolved[userId] = usersCache.data[userId];
+          continue;
+        }
+        try {
+          const result: any = await client.users.info({ user: userId });
+          if (result.user) {
+            const u = result.user;
+            resolved[userId] = {
+              name: u.name || userId,
+              real_name: u.real_name || u.profile?.real_name || u.name || userId,
+              display_name: u.profile?.display_name || "",
+              avatar: u.profile?.image_48 || "",
+            };
+            if (usersCache) {
+              usersCache.data[userId] = resolved[userId];
+            }
+          }
+        } catch {}
+      }
+      return res.json(resolved);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to resolve users" });
+    }
+  });
+
   app.get("/api/slack/users", async (req, res) => {
     const client = await requireSlack(req, res);
     if (!client) return;

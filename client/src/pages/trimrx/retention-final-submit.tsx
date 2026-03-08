@@ -682,6 +682,14 @@ interface SlackActionInfo {
   lastReplyTs: string;
 }
 
+function extractUserIds(text: string): string[] {
+  const ids: string[] = [];
+  const re = /<@([A-Za-z0-9]+)(?:\|[^>]*)?>/g;
+  let m;
+  while ((m = re.exec(text)) !== null) ids.push(m[1]);
+  return ids;
+}
+
 function SlackMessagePanel({
   msg,
   users,
@@ -698,6 +706,9 @@ function SlackMessagePanel({
   const [expandedThread, setExpandedThread] = useState<string | null>(msg.reply_count > 0 ? msg.ts : null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
+  const [extraUsers, setExtraUsers] = useState<Record<string, SlackUser>>({});
+
+  const enrichedUsers = useMemo(() => ({ ...users, ...extraUsers }), [users, extraUsers]);
 
   const checked = hasCheckmark(msg.reactions);
   const threadTs = msg.thread_ts || msg.ts;
@@ -705,8 +716,8 @@ function SlackMessagePanel({
   const isReplying = replyingTo === msg.ts;
   const slackLink = `https://app.slack.com/client/${WORKSPACE_ID}/${CHANNEL_ID}/p${msg.ts.replace(".", "")}`;
 
-  const getUserName = useCallback((id: string) => users[id]?.real_name || users[id]?.name || id, [users]);
-  const getUserAvatar = useCallback((id: string) => users[id]?.avatar || "", [users]);
+  const getUserName = useCallback((id: string) => enrichedUsers[id]?.real_name || enrichedUsers[id]?.name || id, [enrichedUsers]);
+  const getUserAvatar = useCallback((id: string) => enrichedUsers[id]?.avatar || "", [enrichedUsers]);
 
   const isReply = msg.thread_ts && msg.thread_ts !== msg.ts;
   const parentPreview = msg.parent_text
@@ -742,7 +753,7 @@ function SlackMessagePanel({
     }
   }, [msg.reactions, localChecked, checked]);
 
-  const getUserNameStr = useCallback((id: string) => users[id]?.real_name || users[id]?.name || id, [users]);
+  const getUserNameStr = useCallback((id: string) => enrichedUsers[id]?.real_name || enrichedUsers[id]?.name || id, [enrichedUsers]);
 
   const emitUpdate = useCallback((isChecked: boolean, reply?: { user: string; text: string; ts: string } | null) => {
     const r = reply !== undefined ? reply : lastReply;
@@ -852,6 +863,29 @@ function SlackMessagePanel({
     }
   }, [threadReplies]);
 
+  useEffect(() => {
+    const allTexts = [msg.text, ...(threadReplies || []).map((r) => r.text)];
+    const allSenders = [msg.user, ...(threadReplies || []).map((r) => r.user)];
+    const mentionedIds = allTexts.flatMap(extractUserIds);
+    const allIds = [...new Set([...allSenders, ...mentionedIds])];
+    const missing = allIds.filter((id) => !enrichedUsers[id]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    fetch("/api/slack/users/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: missing }),
+    })
+      .then((res) => res.ok ? res.json() : {})
+      .then((resolved) => {
+        if (!cancelled && Object.keys(resolved).length > 0) {
+          setExtraUsers((prev) => ({ ...prev, ...resolved }));
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [msg.text, msg.user, threadReplies, users]);
+
   return (
     <div className="space-y-4" data-testid="slack-message-panel">
       {isReply && (
@@ -884,7 +918,7 @@ function SlackMessagePanel({
 
       <div
         className="text-sm break-words"
-        dangerouslySetInnerHTML={{ __html: formatSlackText(msg.text, users) }}
+        dangerouslySetInnerHTML={{ __html: formatSlackText(msg.text, enrichedUsers) }}
         data-testid="text-slack-message-body"
       />
 
@@ -1009,7 +1043,7 @@ function SlackMessagePanel({
                     </div>
                     <div
                       className="text-sm mt-0.5 break-words text-foreground/80"
-                      dangerouslySetInnerHTML={{ __html: formatSlackText(reply.text, users) }}
+                      dangerouslySetInnerHTML={{ __html: formatSlackText(reply.text, enrichedUsers) }}
                     />
                     {reply.reactions && reply.reactions.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
