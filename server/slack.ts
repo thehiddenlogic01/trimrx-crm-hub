@@ -724,7 +724,9 @@ export function setupSlackRoutes(app: Express) {
 
           const messages = matches.map((msg: any) => {
             const realtime = allByTs[msg.ts];
-            const source = realtime || msg;
+            const source = realtime
+              ? { ...realtime, reply_count: realtime.reply_count || msg.reply_count || 0 }
+              : msg;
             return formatMessage(source, channelId, allByTs);
           });
           return res.json(messages);

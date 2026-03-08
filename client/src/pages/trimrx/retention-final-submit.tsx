@@ -474,7 +474,7 @@ function SlackMessagePanel({
 }) {
   const { can } = usePermissions();
   const { toast } = useToast();
-  const [expandedThread, setExpandedThread] = useState<string | null>(null);
+  const [expandedThread, setExpandedThread] = useState<string | null>(msg.reply_count > 0 ? msg.ts : null);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
 
@@ -498,6 +498,14 @@ function SlackMessagePanel({
   useEffect(() => {
     setLocalChecked(checked);
   }, [checked]);
+
+  useEffect(() => {
+    if (msg.reply_count > 0) {
+      setExpandedThread(msg.ts);
+    } else {
+      setExpandedThread(null);
+    }
+  }, [msg.reply_count, msg.ts]);
 
   const localReactions = useMemo(() => {
     const orig = msg.reactions || [];
@@ -570,13 +578,13 @@ function SlackMessagePanel({
   const { data: threadReplies, isLoading: loadingReplies } = useQuery<ThreadReply[]>({
     queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts],
     queryFn: async ({ signal }) => {
-      const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${msg.ts}`, { signal });
+      const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${msg.ts}?force=1`, { signal });
       if (!res.ok) throw new Error("Failed to fetch replies");
       return res.json();
     },
     enabled: msg.reply_count > 0,
     retry: 1,
-    staleTime: 3 * 60 * 1000,
+    staleTime: 30 * 1000,
   });
 
   useEffect(() => {
