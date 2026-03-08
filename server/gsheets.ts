@@ -164,7 +164,7 @@ export function setupGSheetsRoutes(app: Express) {
         spreadsheetId: config.spreadsheetId,
         range: `${config.sheetName}!A${config.startRow}`,
         valueInputOption: "USER_ENTERED",
-        insertDataOption: "INSERT_ROWS",
+        insertDataOption: "OVERWRITE",
         requestBody: {
           values: rows,
         },
