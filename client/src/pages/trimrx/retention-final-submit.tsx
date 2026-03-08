@@ -224,7 +224,7 @@ const COLUMNS = [
   { key: "sendToSheet", label: "" },
   { key: "slackAction", label: "Slack Action" },
   { key: "caseId", label: "Case ID" },
-  { key: "status", label: "Status" },
+  { key: "status", label: "Case Status" },
   { key: "link", label: "Link" },
   { key: "duplicated", label: "Duplicated" },
   { key: "customerEmail", label: "Customer Email" },

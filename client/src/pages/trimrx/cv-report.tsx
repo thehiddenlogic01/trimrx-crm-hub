@@ -44,7 +44,7 @@ const COLUMNS = [
   { key: "submittedBy", label: "User" },
   { key: "assignedTo", label: "Assigned To" },
   { key: "caseId", label: "Case ID" },
-  { key: "status", label: "Status" },
+  { key: "status", label: "Case Status" },
   { key: "link", label: "Link" },
   { key: "duplicated", label: "Duplicated" },
   { key: "customerEmail", label: "Customer Email" },
