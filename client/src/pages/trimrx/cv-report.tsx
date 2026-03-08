@@ -67,7 +67,7 @@ type ColumnKey = typeof COLUMNS[number]["key"];
 const INLINE_EDITABLE_KEYS: ColumnKey[] = ["name", "customerEmail", "date"];
 
 const PRODUCT_TYPE_OPTIONS = ["1M", "3M Bundle", "6M Bundle", "12M Bundle", "Supplement", "Upsell", "NAD+", "Zofran", "Sermorelin", "Semaglutide", "Tirzepatide"];
-const SLACK_STATUS_RT_OPTIONS = ["Send", "Managed by K/E"];
+const SLACK_STATUS_RT_FALLBACK = ["Send", "Managed by K/E"];
 
 const emptyForm: Record<ColumnKey, string> = {
   submittedBy: "",
@@ -707,6 +707,16 @@ function SlackMessageDialog({ link, caseId }: { link: string; caseId: string }) 
 export default function CvReportPage() {
   const { toast } = useToast();
   const { can, isEditor } = usePermissions();
+  const { data: slackStatusRtSettings } = useQuery<string[]>({
+    queryKey: ["/api/cv-settings", "slack_status_rt_options"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/slack_status_rt_options", { credentials: "include" });
+      if (!res.ok) return SLACK_STATUS_RT_FALLBACK;
+      const data = await res.json();
+      return data.options?.length > 0 ? data.options : SLACK_STATUS_RT_FALLBACK;
+    },
+  });
+  const SLACK_STATUS_RT_OPTIONS = slackStatusRtSettings ?? SLACK_STATUS_RT_FALLBACK;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<Record<ColumnKey, string>>({ ...emptyForm });

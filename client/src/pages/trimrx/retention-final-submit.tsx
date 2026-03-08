@@ -245,7 +245,7 @@ const COLUMNS = [
 type ColumnKey = typeof COLUMNS[number]["key"];
 
 const PRODUCT_TYPE_OPTIONS = ["1M", "3M Bundle", "6M Bundle", "12M Bundle", "Supplement", "Upsell", "NAD+", "Zofran", "Sermorelin", "Semaglutide", "Tirzepatide"];
-const SLACK_STATUS_RT_OPTIONS = ["Send", "Managed by K/E"];
+const SLACK_STATUS_RT_FALLBACK = ["Send", "Managed by K/E"];
 
 const TEXT_EDITABLE_KEYS: ColumnKey[] = ["customerEmail", "name", "notesTrimrx"];
 
@@ -1131,6 +1131,16 @@ function saveSlackAction(key: string, info: SlackActionInfo) {
 export default function RetentionFinalSubmitPage() {
   const { toast } = useToast();
   const { can } = usePermissions();
+  const { data: slackStatusRtSettings } = useQuery<string[]>({
+    queryKey: ["/api/cv-settings", "slack_status_rt_options"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/slack_status_rt_options", { credentials: "include" });
+      if (!res.ok) return SLACK_STATUS_RT_FALLBACK;
+      const data = await res.json();
+      return data.options?.length > 0 ? data.options : SLACK_STATUS_RT_FALLBACK;
+    },
+  });
+  const SLACK_STATUS_RT_OPTIONS = slackStatusRtSettings ?? SLACK_STATUS_RT_FALLBACK;
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDate, setFilterDate] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);

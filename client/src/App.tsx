@@ -25,6 +25,7 @@ const DisputeReportYedidPage = lazy(() => import("@/pages/trimrx/dispute-report-
 const DisputesFinderPage = lazy(() => import("@/pages/trimrx/disputes-finder"));
 const StripeSubmitPage = lazy(() => import("@/pages/trimrx/stripe-submit"));
 const DisputeSettingsPage = lazy(() => import("@/pages/trimrx/dispute-settings"));
+const CvSettingsPage = lazy(() => import("@/pages/trimrx/cv-settings"));
 const DisputesDocPage = lazy(() => import("@/pages/trimrx/disputes-doc"));
 const PatientsAnalysisPage = lazy(() => import("@/pages/trimrx/patients-analysis"));
 const SlackMessagesPage = lazy(() => import("@/pages/trimrx/slack-messages"));
@@ -171,6 +172,9 @@ function AppLayout() {
                   </Route>
                   <Route path="/trimrx/dispute-settings">
                     {() => <ProtectedRoute component={DisputeSettingsPage} path="/trimrx/dispute-settings" />}
+                  </Route>
+                  <Route path="/trimrx/cv-settings">
+                    {() => <ProtectedRoute component={CvSettingsPage} path="/trimrx/cv-settings" />}
                   </Route>
                   <Route path="/gpt-chat">
                     {() => <ProtectedRoute component={GptChatPage} path="/gpt-chat" />}

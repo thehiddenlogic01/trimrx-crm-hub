@@ -50,6 +50,7 @@ const trimrxMenu = [
   { title: "Manage Slack Case", url: "/trimrx/slack-messages", icon: MessagesSquare },
   { title: "RT Help", url: "/trimrx/rt-help", icon: Headphones },
   { title: "CV Slack", url: "/trimrx/cv-slack", icon: Hash },
+  { title: "CV Settings", url: "/trimrx/cv-settings", icon: Settings },
 ];
 
 const disputesMenu = [

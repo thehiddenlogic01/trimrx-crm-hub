@@ -8,6 +8,7 @@ import { setupGSheetsRoutes } from "./gsheets";
 import { setupCaseFolderRoutes } from "./case-folders";
 import { setupDisputeReportsYedidRoutes } from "./dispute-reports-yedid";
 import { setupDisputeSettingsRoutes } from "./dispute-settings";
+import { setupCvSettingsRoutes } from "./cv-settings";
 import { setupCareValidateRoutes } from "./carevalidate";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { setupPtFinderRoutes } from "./pt-finder";
@@ -26,6 +27,7 @@ export async function registerRoutes(
   setupCaseFolderRoutes(app);
   setupDisputeReportsYedidRoutes(app);
   setupDisputeSettingsRoutes(app);
+  setupCvSettingsRoutes(app);
   setupCareValidateRoutes(app);
   registerChatRoutes(app);
   setupPtFinderRoutes(app);
