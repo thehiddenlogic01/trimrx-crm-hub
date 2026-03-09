@@ -121,6 +121,7 @@ export const APP_FEATURES: PageFeatures[] = [
       { key: "push-sheets", label: "Push to Google Sheets" },
       { key: "slack-lookup", label: "Slack Lookup" },
       { key: "all-edit-access", label: "All Edit Access (dropdowns & inline editing)" },
+      { key: "carevalidate-token", label: "CareValidate Token Management" },
     ],
   },
   {

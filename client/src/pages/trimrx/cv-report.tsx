@@ -1439,6 +1439,7 @@ export default function CvReportPage() {
             <p className="text-xs text-muted-foreground mt-0.5">TrimRX cancellation and retention tracking</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
+            {can("cv-report", "carevalidate-token") && (
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -1507,6 +1508,7 @@ export default function CvReportPage() {
                 </div>
               </PopoverContent>
             </Popover>
+            )}
             <div className="flex items-center gap-1.5 border rounded-md px-2 py-1">
               <Button
                 variant="outline"
