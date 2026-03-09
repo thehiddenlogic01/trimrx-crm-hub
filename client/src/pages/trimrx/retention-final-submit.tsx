@@ -1239,6 +1239,8 @@ export default function RetentionFinalSubmitPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [lastOpenedId, setLastOpenedId] = useState<number | null>(null);
+  const lastOpenedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [slackCache, setSlackCache] = useState<Record<string, SlackMessage[] | null>>(persistentSlackCache);
   const [slackLoading, setSlackLoading] = useState<Record<string, boolean>>({});
   const [slackActions, setSlackActions] = useState<Record<string, SlackActionInfo>>(() => loadSlackActions());
@@ -1931,7 +1933,15 @@ export default function RetentionFinalSubmitPage() {
                   {paginatedData.map((report) => (
                     <TableRow
                       key={report.id}
-                      className={selectedIds.has(report.id) ? "bg-muted/50" : ""}
+                      className={
+                        sheetOpen && selectedReport?.id === report.id
+                          ? "bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-200 dark:ring-blue-800 transition-colors duration-300"
+                          : lastOpenedId === report.id
+                            ? "bg-blue-50/60 dark:bg-blue-950/20 transition-colors duration-1000"
+                            : selectedIds.has(report.id)
+                              ? "bg-muted/50"
+                              : ""
+                      }
                       data-testid={`row-report-${report.id}`}
                     >
                       <TableCell className="py-2.5">
@@ -2028,7 +2038,17 @@ export default function RetentionFinalSubmitPage() {
         </CardContent>
       </Card>
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(open) => {
+        setSheetOpen(open);
+        if (!open && selectedReport) {
+          const closedId = selectedReport.id;
+          setLastOpenedId(closedId);
+          if (lastOpenedTimerRef.current) clearTimeout(lastOpenedTimerRef.current);
+          lastOpenedTimerRef.current = setTimeout(() => {
+            setLastOpenedId((prev) => prev === closedId ? null : prev);
+          }, 5000);
+        }
+      }}>
         <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
