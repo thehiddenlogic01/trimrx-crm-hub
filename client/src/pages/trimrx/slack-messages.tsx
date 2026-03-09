@@ -212,6 +212,7 @@ function cleanExtractedText(text: string): string {
   c = c.replace(/&lt;/g, "<");
   c = c.replace(/&gt;/g, ">");
   c = c.replace(/\n\s*\n\s*\n/g, "\n");
+  c = c.replace(/^[\s:•\-–—]+/, "");
   return c.trim();
 }
 
