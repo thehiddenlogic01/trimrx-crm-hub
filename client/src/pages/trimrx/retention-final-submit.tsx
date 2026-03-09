@@ -1795,7 +1795,7 @@ export default function RetentionFinalSubmitPage() {
                   try { localStorage.setItem("retention-slack-status-filter", v); } catch {}
                 }}
               >
-                <SelectTrigger className="h-8 text-xs w-[180px]" data-testid="filter-slack-status-rt">
+                <SelectTrigger className={`h-8 text-xs w-[180px] ${slackStatusFilter ? "bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950 dark:border-blue-800 dark:text-blue-300" : ""}`} data-testid="filter-slack-status-rt">
                   <SelectValue placeholder="All Slack Status (RT)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1846,7 +1846,7 @@ export default function RetentionFinalSubmitPage() {
                   placeholder="Search reports..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 h-8 w-[220px] text-sm"
+                  className={`pl-8 h-8 w-[220px] text-sm ${searchQuery ? "bg-purple-50 border-purple-200 text-purple-700 dark:bg-purple-950 dark:border-purple-800 dark:text-purple-300" : ""}`}
                   data-testid="input-search"
                 />
               </div>
