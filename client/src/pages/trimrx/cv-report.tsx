@@ -991,6 +991,22 @@ export default function CvReportPage() {
     },
   });
 
+  const [deleteSelectedConfirmOpen, setDeleteSelectedConfirmOpen] = useState(false);
+  const deleteSelectedMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await apiRequest("POST", "/api/cv-reports/delete-bulk", { ids });
+    },
+    onSuccess: (_d, ids) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+      setSelectedIds(new Set());
+      setDeleteSelectedConfirmOpen(false);
+      toast({ title: `${ids.length} report${ids.length > 1 ? "s" : ""} deleted` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete selected", description: err.message, variant: "destructive" });
+    },
+  });
+
   const [deleteAllConfirmOpen, setDeleteAllConfirmOpen] = useState(false);
   const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
   const deleteAllMutation = useMutation({
@@ -1803,6 +1819,16 @@ export default function CvReportPage() {
                   {can("cv-report", "delete") && (
                     <>
                       <div className="border-t my-1" />
+                      {selectedIds.size > 0 && (
+                        <button
+                          className="w-full flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-accent transition-colors text-destructive"
+                          data-testid="button-delete-selected"
+                          onClick={() => setDeleteSelectedConfirmOpen(true)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete Selected ({selectedIds.size})
+                        </button>
+                      )}
                       <button
                         className="w-full flex items-center gap-2 text-sm px-2 py-1.5 rounded hover:bg-accent transition-colors text-destructive"
                         data-testid="button-delete-all"
@@ -1845,6 +1871,30 @@ export default function CvReportPage() {
                 >
                   {deleteAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Delete All Reports
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={deleteSelectedConfirmOpen} onOpenChange={setDeleteSelectedConfirmOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-destructive">Delete Selected Reports</DialogTitle>
+                <DialogDescription>
+                  This will permanently delete <strong>{selectedIds.size}</strong> selected report{selectedIds.size > 1 ? "s" : ""}. This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteSelectedConfirmOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  data-testid="button-confirm-delete-selected"
+                  disabled={deleteSelectedMutation.isPending || selectedIds.size === 0}
+                  onClick={() => { if (selectedIds.size > 0) deleteSelectedMutation.mutate(Array.from(selectedIds)); }}
+                >
+                  {deleteSelectedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Delete {selectedIds.size} Report{selectedIds.size > 1 ? "s" : ""}
                 </Button>
               </DialogFooter>
             </DialogContent>

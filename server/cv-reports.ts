@@ -638,6 +638,19 @@ export function setupCvReportRoutes(app: Express) {
     }
   });
 
+  app.post("/api/cv-reports/delete-bulk", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) return res.status(401).json({ message: "Not authenticated" });
+    try {
+      const parsed = z.object({ ids: z.array(z.number().int().positive()).min(1) }).parse(req.body);
+      for (const id of parsed.ids) {
+        await storage.deleteCvReport(id);
+      }
+      return res.json({ ok: true, deleted: parsed.ids.length });
+    } catch (err: any) {
+      return res.status(400).json({ message: err.message || "Failed to delete selected" });
+    }
+  });
+
   app.delete("/api/cv-reports/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
