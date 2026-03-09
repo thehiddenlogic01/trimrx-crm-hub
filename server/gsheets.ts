@@ -164,24 +164,25 @@ export function setupGSheetsRoutes(app: Express) {
         spreadsheetId: config.spreadsheetId,
         range: `${config.sheetName}!A${config.startRow}`,
         valueInputOption: "USER_ENTERED",
-        insertDataOption: "OVERWRITE",
+        insertDataOption: "INSERT_ROWS",
         requestBody: {
           values: rows,
         },
       });
 
+      const updatedRange = appendResult.data.updates?.updatedRange || "";
+      const updatedRangeMatch = updatedRange.match(/!([A-Z]+)(\d+)/);
+      const nextRow = updatedRangeMatch ? parseInt(updatedRangeMatch[2]) : config.startRow;
+
       const sheetMeta = await sheets.spreadsheets.get({ spreadsheetId: config.spreadsheetId });
       const sheetObj = sheetMeta.data.sheets?.find((s) => s.properties?.title === config.sheetName);
       const sheetId = sheetObj?.properties?.sheetId ?? 0;
 
-      const updatedRange = appendResult.data.updates?.updatedRange || "";
-      const rangeMatch = updatedRange.match(/!([A-Z]+)(\d+):([A-Z]+)(\d+)/);
-      if (rangeMatch) {
-        const startRowIdx = parseInt(rangeMatch[2]) - 1;
-        const endRowIdx = parseInt(rangeMatch[4]);
-        const endColIdx = maxColIndex + 1;
+      const startRowIdx = nextRow - 1;
+      const endRowIdx = nextRow - 1 + rows.length;
+      const endColIdx = maxColIndex + 1;
 
-        const batchRequests: any[] = [
+      const batchRequests: any[] = [
           {
             repeatCell: {
               range: {
@@ -275,11 +276,10 @@ export function setupGSheetsRoutes(app: Express) {
         }
 
 
-        await sheets.spreadsheets.batchUpdate({
-          spreadsheetId: config.spreadsheetId,
-          requestBody: { requests: batchRequests },
-        });
-      }
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId: config.spreadsheetId,
+        requestBody: { requests: batchRequests },
+      });
 
       for (const report of selectedReports) {
         await storage.updateCvReport(report.id, { sentToSheet: "yes" } as any);
@@ -339,6 +339,17 @@ export function setupGSheetsRoutes(app: Express) {
       res.status(500).json({ error: err.message });
     }
   });
+}
+
+function indexToColumnLetter(index: number): string {
+  let letter = "";
+  let i = index + 1;
+  while (i > 0) {
+    const rem = (i - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    i = Math.floor((i - 1) / 26);
+  }
+  return letter;
 }
 
 function columnLetterToIndex(letter: string): number {
