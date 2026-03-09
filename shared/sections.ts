@@ -106,6 +106,7 @@ export const APP_FEATURES: PageFeatures[] = [
       { key: "delete-message", label: "Delete Messages" },
       { key: "check-cv-status", label: "Check CV Status" },
       { key: "bulk-done", label: "Bulk Mark Done" },
+      { key: "reply-filter", label: "Reply Filter (All Replies dropdown)" },
     ],
   },
   {

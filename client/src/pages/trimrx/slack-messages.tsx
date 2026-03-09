@@ -1266,6 +1266,7 @@ export default function SlackMessagesPage() {
             <CornerDownRight className="h-3.5 w-3.5" />
             {hideReplies ? "Replies Hidden" : "Hide Replies"}
           </Button>
+          {can("slack-messages", "reply-filter") && (
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="outline" className="h-9 w-[220px] justify-between text-sm font-normal" disabled={replyFilterLoading} data-testid="select-reply-filter">
@@ -1308,6 +1309,7 @@ export default function SlackMessagesPage() {
               </div>
             </PopoverContent>
           </Popover>
+          )}
           <div className="relative">
             <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input

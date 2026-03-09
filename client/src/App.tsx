@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, Component } from "react";
+import type { ErrorInfo, ReactNode } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -11,8 +12,46 @@ import { hasRouteAccess, APP_SECTIONS } from "@shared/sections";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import NotFound from "@/pages/not-found";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert, RefreshCw } from "lucide-react";
 import { Redirect } from "wouter";
+import { Button } from "@/components/ui/button";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Page error:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <ShieldAlert className="h-12 w-12 text-orange-500" />
+          <h2 className="text-lg font-semibold text-foreground">Something went wrong</h2>
+          <p className="text-sm text-muted-foreground max-w-md text-center">
+            This page encountered an error. Click below to retry.
+          </p>
+          <Button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            data-testid="button-error-retry"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const UserManagementPage = lazy(() => import("@/pages/admin/users"));
 const ApiKeysPage = lazy(() => import("@/pages/admin/api-keys"));
@@ -119,6 +158,7 @@ function AppLayout() {
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </header>
           <main className="flex-1 overflow-auto p-6">
+            <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <PageWrapper>
                 <Switch>
@@ -198,6 +238,7 @@ function AppLayout() {
                 </Switch>
               </PageWrapper>
             </Suspense>
+            </ErrorBoundary>
           </main>
         </div>
       </div>
