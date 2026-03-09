@@ -1209,10 +1209,18 @@ export default function RetentionFinalSubmitPage() {
     },
   });
   const SLACK_STATUS_RT_OPTIONS = slackStatusRtSettings ?? SLACK_STATUS_RT_FALLBACK;
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterDate, setFilterDate] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [searchQuery, setSearchQuery] = useState(() => {
+    try { return localStorage.getItem("retention-searchQuery") || ""; } catch { return ""; }
+  });
+  const [filterDate, setFilterDate] = useState<string>(() => {
+    try { return localStorage.getItem("retention-filterDate") || ""; } catch { return ""; }
+  });
+  const [currentPage, setCurrentPage] = useState(() => {
+    try { const v = localStorage.getItem("retention-currentPage"); return v ? Number(v) : 1; } catch { return 1; }
+  });
+  const [pageSize, setPageSize] = useState(() => {
+    try { const v = localStorage.getItem("retention-pageSize"); return v ? Number(v) : 10; } catch { return 10; }
+  });
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
       const saved = localStorage.getItem("retention-final-hidden-columns");
@@ -1236,6 +1244,11 @@ export default function RetentionFinalSubmitPage() {
       setFilterAssignedTo(user.username);
     }
   }, [user, isAdmin]);
+  useEffect(() => { localStorage.setItem("retention-searchQuery", searchQuery); }, [searchQuery]);
+  useEffect(() => { localStorage.setItem("retention-filterDate", filterDate); }, [filterDate]);
+  useEffect(() => { localStorage.setItem("retention-currentPage", String(currentPage)); }, [currentPage]);
+  useEffect(() => { localStorage.setItem("retention-pageSize", String(pageSize)); }, [pageSize]);
+
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedReport, setSelectedReport] = useState<CvReport | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);

@@ -785,7 +785,9 @@ export default function CvReportPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<Record<ColumnKey, string>>({ ...emptyForm });
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(() => {
+    try { const v = localStorage.getItem("cv-report-currentPage"); return v ? Number(v) : 1; } catch { return 1; }
+  });
   const [pageSize, setPageSize] = useState(() => {
     try { const v = localStorage.getItem("cv-report-pageSize"); return v ? Number(v) : 20; } catch { return 20; }
   });
@@ -832,7 +834,9 @@ export default function CvReportPage() {
       setFilterAssignedTo(user.username);
     }
   }, [user, isAdmin]);
-  const [filterDate, setFilterDate] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>(() => {
+    try { return localStorage.getItem("cv-report-filterDate") || ""; } catch { return ""; }
+  });
   const [hiddenColumns, setHiddenColumns] = useState<Set<ColumnKey>>(() => {
     try {
       const saved = localStorage.getItem("cv-report-hidden-columns");
@@ -859,6 +863,8 @@ export default function CvReportPage() {
   useEffect(() => { localStorage.setItem("cv-report-filterBrokenLinks", String(filterBrokenLinks)); }, [filterBrokenLinks]);
   useEffect(() => { localStorage.setItem("cv-report-filterAssignedTo", filterAssignedTo); }, [filterAssignedTo]);
   useEffect(() => { localStorage.setItem("cv-report-filterSlackStatusRt", filterSlackStatusRt); }, [filterSlackStatusRt]);
+  useEffect(() => { localStorage.setItem("cv-report-filterDate", filterDate); }, [filterDate]);
+  useEffect(() => { localStorage.setItem("cv-report-currentPage", String(currentPage)); }, [currentPage]);
 
   useEffect(() => {
     if (!activeTaskId) return;
