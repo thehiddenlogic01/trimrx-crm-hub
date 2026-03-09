@@ -1150,10 +1150,17 @@ export default function SlackMessagesPage() {
       }
     }
     setReplyFilters(newFilters);
-    const needsScan = newFilters.filter((f) => f !== "no-reply");
-    if (needsScan.length > 0) {
-      setReplyFilterMatchedMap({});
-      scanRepliesForFilters(needsScan);
+    if (isSelected) {
+      setReplyFilterMatchedMap((prev) => {
+        const next = { ...prev };
+        delete next[value];
+        return next;
+      });
+    } else {
+      const toScan = [value].filter((f) => f !== "no-reply" && !replyFilterMatchedMap[f]);
+      if (toScan.length > 0) {
+        scanRepliesForFilters(toScan);
+      }
     }
   };
 
@@ -1170,7 +1177,7 @@ export default function SlackMessagesPage() {
           if (msg.reply_count > 0) return false;
         } else {
           const matched = replyFilterMatchedMap[rf];
-          if (!matched) continue;
+          if (!matched) return false;
           if (!matched[msg.ts]) return false;
         }
       }
