@@ -117,16 +117,68 @@ export function AppSidebar() {
     staleTime: 60 * 1000,
   });
 
+  const { data: menuOrder = {} } = useQuery<Record<string, string[]>>({
+    queryKey: ["/api/cv-settings", "sidebar_menu_order"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/sidebar_menu_order", { credentials: "include" });
+      if (!res.ok) return {};
+      const data = await res.json();
+      return data.options || {};
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const { data: sectionOrder = [] } = useQuery<string[]>({
+    queryKey: ["/api/cv-settings", "sidebar_section_order"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/sidebar_section_order", { credentials: "include" });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.options || [];
+    },
+    staleTime: 60 * 1000,
+  });
+
   const role = (user as any)?.role || "manager";
   const permissions = parsePermissions((user as any)?.permissions);
 
-  const sections = [
+  const SECTION_LABEL_MAP: Record<string, string> = {
+    "trimrx-cv": "TrimRX CV",
+    "trimrx-disputes": "TrimRX Disputes",
+    "communication": "Communication",
+    "database": "Database",
+    "admin": "Admin",
+  };
+
+  const defaultSections = [
     { key: "trimrx-cv", label: "TrimRX CV", icon: Scissors, items: trimrxMenu },
     { key: "trimrx-disputes", label: "TrimRX Disputes", icon: Gavel, items: disputesMenu },
     { key: "communication", label: "Communication", icon: Radio, items: communicationMenu },
     { key: "database", label: "Database", icon: Database, items: databaseMenu },
     { key: "admin", label: "Admin", icon: ShieldCheck, items: adminMenu },
   ];
+
+  const applyMenuOrder = (section: typeof defaultSections[0]) => {
+    const saved = menuOrder[section.label];
+    if (!saved || saved.length === 0) return section.items;
+    const itemMap = new Map(section.items.map((item) => [item.url, item]));
+    const ordered = saved.map((url: string) => itemMap.get(url)).filter(Boolean) as typeof section.items;
+    const remaining = section.items.filter((item) => !saved.includes(item.url));
+    return [...ordered, ...remaining];
+  };
+
+  const applySectionOrder = () => {
+    const nonAdmin = defaultSections.filter((s) => s.key !== "admin");
+    const adminSection = defaultSections.find((s) => s.key === "admin");
+    if (sectionOrder.length === 0) return [...nonAdmin, ...(adminSection ? [adminSection] : [])];
+    const sectionMap = new Map(nonAdmin.map((s) => [s.label, s]));
+    const savedNonAdmin = sectionOrder.filter((label: string) => label !== "Admin");
+    const ordered = savedNonAdmin.map((label: string) => sectionMap.get(label)).filter(Boolean) as typeof defaultSections;
+    const remaining = nonAdmin.filter((s) => !savedNonAdmin.includes(s.label));
+    return [...ordered, ...remaining, ...(adminSection ? [adminSection] : [])];
+  };
+
+  const sections = applySectionOrder().map((s) => ({ ...s, items: applyMenuOrder(s) }));
 
   return (
     <Sidebar>

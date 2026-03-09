@@ -4,12 +4,13 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Tag, Package, Crosshair, AlertTriangle, LayoutDashboard, Eye, EyeOff } from "lucide-react";
+import { ChevronDown, ChevronRight, Tag, Package, Crosshair, AlertTriangle, LayoutDashboard, Eye, EyeOff, ArrowUp, ArrowDown, GripVertical, ArrowUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { REASON_SUBREASON_MAP, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS } from "@shared/classification";
 import { APP_PAGES } from "@shared/sections";
@@ -237,6 +238,201 @@ const SIDEBAR_SECTIONS: { label: string; routes: string[] }[] = [
   },
 ];
 
+function SectionOrderSection() {
+  const { toast } = useToast();
+  const nonAdminSections = SIDEBAR_SECTIONS.filter((s) => s.label !== "Admin").map((s) => s.label);
+
+  const { data: sectionOrder = nonAdminSections } = useQuery<string[]>({
+    queryKey: ["/api/cv-settings", "sidebar_section_order"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/sidebar_section_order", { credentials: "include" });
+      if (!res.ok) return nonAdminSections;
+      const data = await res.json();
+      const saved: string[] = (data.options || []).filter((s: string) => s !== "Admin");
+      if (saved.length === 0) return nonAdminSections;
+      const merged = [...saved.filter((s: string) => nonAdminSections.includes(s)), ...nonAdminSections.filter((s) => !saved.includes(s))];
+      return merged;
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (newOrder: string[]) => {
+      await apiRequest("POST", "/api/cv-settings/sidebar_section_order", { options: newOrder });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-settings", "sidebar_section_order"] });
+      toast({ title: "Saved", description: "Section order updated." });
+    },
+  });
+
+  const moveSection = (index: number, direction: "up" | "down") => {
+    const newOrder = [...sectionOrder];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
+    saveMutation.mutate(newOrder);
+  };
+
+  return (
+    <Card data-testid="card-section-order">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <ArrowUpDown className="h-5 w-5 text-primary" />
+          Section Order
+        </CardTitle>
+        <CardDescription>
+          Control the order of sidebar sections. Move sections up or down to rearrange. Admin section is always pinned at the bottom.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {sectionOrder.map((label, index) => (
+          <div
+            key={label}
+            className="flex items-center justify-between p-3 rounded-lg border bg-background"
+            data-testid={`row-section-order-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            <div className="flex items-center gap-3">
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{label}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                disabled={index === 0 || saveMutation.isPending}
+                onClick={() => moveSection(index, "up")}
+                data-testid={`button-section-up-${label.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                disabled={index === sectionOrder.length - 1 || saveMutation.isPending}
+                onClick={() => moveSection(index, "down")}
+                data-testid={`button-section-down-${label.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/50 opacity-60">
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Admin</span>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">Pinned</Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MenuOrderSection() {
+  const { toast } = useToast();
+
+  const { data: menuOrder = {} } = useQuery<Record<string, string[]>>({
+    queryKey: ["/api/cv-settings", "sidebar_menu_order"],
+    queryFn: async () => {
+      const res = await fetch("/api/cv-settings/sidebar_menu_order", { credentials: "include" });
+      if (!res.ok) return {};
+      const data = await res.json();
+      return data.options || {};
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (newOrder: Record<string, string[]>) => {
+      await apiRequest("POST", "/api/cv-settings/sidebar_menu_order", { options: newOrder });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-settings", "sidebar_menu_order"] });
+      toast({ title: "Saved", description: "Menu order updated." });
+    },
+  });
+
+  const getOrderedRoutes = (section: { label: string; routes: string[] }) => {
+    const saved = menuOrder[section.label];
+    if (!saved || saved.length === 0) return section.routes;
+    const merged = [...saved.filter((r: string) => section.routes.includes(r)), ...section.routes.filter((r) => !saved.includes(r))];
+    return merged;
+  };
+
+  const moveItem = (sectionLabel: string, routes: string[], index: number, direction: "up" | "down") => {
+    const ordered = [...routes];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= ordered.length) return;
+    [ordered[index], ordered[targetIndex]] = [ordered[targetIndex], ordered[index]];
+    const newOrder = { ...menuOrder, [sectionLabel]: ordered };
+    saveMutation.mutate(newOrder);
+  };
+
+  return (
+    <Card data-testid="card-menu-order-section">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <GripVertical className="h-5 w-5 text-primary" />
+          Menu Item Order
+        </CardTitle>
+        <CardDescription>
+          Control the order of menu items within each sidebar section. Move items up or down to rearrange.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {SIDEBAR_SECTIONS.filter((s) => s.label !== "Admin").map((section) => {
+          const orderedRoutes = getOrderedRoutes(section);
+          return (
+            <div key={section.label}>
+              <h4 className="text-sm font-semibold text-muted-foreground mb-3">{section.label}</h4>
+              <div className="space-y-1.5">
+                {orderedRoutes.map((route, index) => {
+                  const label = APP_PAGES[route] || route;
+                  return (
+                    <div
+                      key={route}
+                      className="flex items-center justify-between p-2.5 rounded-lg border bg-background hover:bg-muted/30 transition-colors"
+                      data-testid={`row-menu-order-${route.replace(/\//g, "-").slice(1)}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground font-mono w-5 text-center">{index + 1}</span>
+                        <span className="text-sm">{label}</span>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{route}</Badge>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={index === 0 || saveMutation.isPending}
+                          onClick={() => moveItem(section.label, orderedRoutes, index, "up")}
+                          data-testid={`button-menu-up-${route.replace(/\//g, "-").slice(1)}`}
+                        >
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={index === orderedRoutes.length - 1 || saveMutation.isPending}
+                          onClick={() => moveItem(section.label, orderedRoutes, index, "down")}
+                          data-testid={`button-menu-down-${route.replace(/\//g, "-").slice(1)}`}
+                        >
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
 function SidebarVisibilitySection() {
   const { toast } = useToast();
 
@@ -341,6 +537,8 @@ export default function AdminSettingsPage() {
       </div>
 
       <SidebarVisibilitySection />
+      <SectionOrderSection />
+      <MenuOrderSection />
       <ReasonSection />
       <ProductTypeSection />
       <DesiredActionSection />
