@@ -1937,7 +1937,7 @@ export default function RetentionFinalSubmitPage() {
                         sheetOpen && selectedReport?.id === report.id
                           ? "bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-200 dark:ring-blue-800 transition-colors duration-300"
                           : lastOpenedId === report.id
-                            ? "bg-blue-50/60 dark:bg-blue-950/20 transition-colors duration-1000"
+                            ? "bg-orange-100 dark:bg-orange-900/40 ring-1 ring-orange-300 dark:ring-orange-700 transition-colors duration-1000"
                             : selectedIds.has(report.id)
                               ? "bg-muted/50"
                               : ""
