@@ -400,6 +400,7 @@ function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage
           productType: "",
           clientThreat,
           submittedBy: user?.username || "",
+          assignedTo: user?.username || "",
         });
         setSent((prev) => prev + 1);
         const modeInfo = sendMode === "extract-only" ? " (extract only)" : sendMode === "without-reason" ? ` (${desiredAction || "no action"})` : ` (${reason || "?"})`;
@@ -1921,6 +1922,7 @@ function MessageCard({
         productType: "",
         clientThreat,
         submittedBy: user?.username || "",
+        assignedTo: user?.username || "",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
       setCvSent(true);
