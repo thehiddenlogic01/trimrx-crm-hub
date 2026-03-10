@@ -705,6 +705,9 @@ export default function SlackMessagesPage() {
   const [trackerMatchMap, setTrackerMatchMap] = useState<Record<string, Record<string, string> | null>>({});
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
   const [trackerFilter, setTrackerFilter] = useState("all");
+  const [paymentsMap, setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>({});
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsProgress, setPaymentsProgress] = useState({ done: 0, total: 0 });
 
   const { data: slackStatus } = useQuery<{ connected: boolean; team?: string }>({
     queryKey: ["/api/slack/status"],
@@ -1221,6 +1224,50 @@ export default function SlackMessagesPage() {
     setReplyFilterMatchedMap({});
   };
 
+  const handleCheckAllPayments = async () => {
+    if (!baseMessages || baseMessages.length === 0) return;
+    const msgsToCheck = baseMessages.filter((msg) => passesBaseFilters(msg));
+    if (msgsToCheck.length === 0) {
+      toast({ title: "No messages to check", variant: "destructive" });
+      return;
+    }
+    setPaymentsLoading(true);
+    setPaymentsProgress({ done: 0, total: msgsToCheck.length });
+    const newMap: typeof paymentsMap = {};
+    const CONCURRENCY = 3;
+
+    for (let i = 0; i < msgsToCheck.length; i += CONCURRENCY) {
+      const batch = msgsToCheck.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(async (msg) => {
+          const extracted = extractCaseFromSlackMsg(msg.text);
+          if (!extracted || (!extracted.link && !extracted.caseId)) {
+            return { ts: msg.ts, data: { found: false, message: "No case link or ID found" } };
+          }
+          try {
+            const res = await apiRequest("POST", "/api/stripe-payments/lookup-by-case", {
+              caseLink: extracted.link || undefined,
+              caseId: extracted.caseId || undefined,
+            });
+            const result = await res.json();
+            return { ts: msg.ts, data: result };
+          } catch (err: any) {
+            return { ts: msg.ts, data: { found: false, error: err.message || "Lookup failed" } };
+          }
+        })
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          newMap[r.value.ts] = r.value.data;
+        }
+      }
+      setPaymentsProgress((prev) => ({ ...prev, done: Math.min(prev.done + batch.length, msgsToCheck.length) }));
+    }
+    setPaymentsMap(newMap);
+    setPaymentsLoading(false);
+    toast({ title: `Payment check complete (${msgsToCheck.length} messages)` });
+  };
+
   const filteredMessages = baseMessages.filter((msg) => {
     if (!passesBaseFilters(msg)) return false;
     if (replyFilters.length > 0) {
@@ -1531,9 +1578,20 @@ export default function SlackMessagesPage() {
             variant="outline"
             size="sm"
             data-testid="button-check-all-payments"
+            onClick={handleCheckAllPayments}
+            disabled={paymentsLoading}
           >
-            <CreditCard className="h-3.5 w-3.5 mr-1" />
-            Check all Payments
+            {paymentsLoading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                Checking... ({paymentsProgress.done}/{paymentsProgress.total})
+              </>
+            ) : (
+              <>
+                <CreditCard className="h-3.5 w-3.5 mr-1" />
+                Check all Payments
+              </>
+            )}
           </Button>
           <Button
             variant="outline"
@@ -1616,6 +1674,7 @@ export default function SlackMessagesPage() {
               showCheckbox={Object.keys(cvStatusMap).length > 0}
               isSelected={selectedMessages.has(msg.ts)}
               onToggleSelect={() => toggleSelectMessage(msg.ts)}
+              paymentData={paymentsMap[msg.ts]}
             />
           ))}
         </div>
@@ -1900,6 +1959,7 @@ function MessageCard({
   showCheckbox,
   isSelected,
   onToggleSelect,
+  paymentData,
   expandIndex = 0,
 }: {
   msg: SlackMessage;
@@ -1925,6 +1985,7 @@ function MessageCard({
   showCheckbox?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  paymentData?: { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string };
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -2261,9 +2322,43 @@ function MessageCard({
           </div>
           <div className="border-t pt-2" data-testid={`panel-payments-${msg.ts}`}>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Payments</h4>
-            <div className="text-xs text-muted-foreground">
-              <span data-testid={`payments-info-${msg.ts}`}>—</span>
-            </div>
+            {paymentData ? (
+              <div className="space-y-1.5 text-xs">
+                {paymentData.email && (
+                  <div className="flex justify-between gap-1">
+                    <span className="text-muted-foreground">Email</span>
+                    <span className="font-medium text-foreground truncate max-w-[160px]" title={paymentData.email} data-testid={`payments-email-${msg.ts}`}>{paymentData.email}</span>
+                  </div>
+                )}
+                {paymentData.found && paymentData.paymentIntents && paymentData.paymentIntents.length > 0 ? (
+                  <div className="space-y-1" data-testid={`payments-intents-${msg.ts}`}>
+                    {paymentData.paymentIntents.map((pi: any, idx: number) => (
+                      <div key={pi.id || idx} className="border rounded px-2 py-1 bg-muted/30">
+                        <div className="flex justify-between items-center">
+                          <span className="font-medium">${pi.amount?.toFixed(2)} {pi.currency}</span>
+                          <span className={`text-[10px] px-1 py-0.5 rounded ${pi.status === "succeeded" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : pi.status === "canceled" || pi.status === "failed" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"}`}>
+                            {pi.status === "succeeded" && "✓ "}{pi.status}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {new Date(pi.created).toLocaleDateString()} — {pi.description || "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : paymentData.found && paymentData.customers && paymentData.customers.length > 0 ? (
+                  <span className="text-muted-foreground italic" data-testid={`payments-info-${msg.ts}`}>No payment intents</span>
+                ) : paymentData.error ? (
+                  <span className="text-red-500" data-testid={`payments-info-${msg.ts}`}>{paymentData.error}</span>
+                ) : (
+                  <span className="text-muted-foreground italic" data-testid={`payments-info-${msg.ts}`}>{paymentData.message || "No data"}</span>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                <span data-testid={`payments-info-${msg.ts}`}>—</span>
+              </div>
+            )}
           </div>
           <div className="border-t pt-2" data-testid={`panel-tracker-${msg.ts}`}>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Tracker</h4>
