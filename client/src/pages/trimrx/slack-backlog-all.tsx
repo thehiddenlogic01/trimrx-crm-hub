@@ -708,6 +708,9 @@ export default function SlackMessagesPage() {
   const [paymentsMap, setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>({});
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsProgress, setPaymentsProgress] = useState({ done: 0, total: 0 });
+  const [cvDataMap, setCvDataMap] = useState<Record<string, { name?: string; email?: string; status?: string; found?: boolean; error?: string }>>({});
+  const [cvSyncLoading, setCvSyncLoading] = useState(false);
+  const [cvSyncProgress, setCvSyncProgress] = useState({ done: 0, total: 0 });
 
   const { data: slackStatus } = useQuery<{ connected: boolean; team?: string }>({
     queryKey: ["/api/slack/status"],
@@ -1268,6 +1271,57 @@ export default function SlackMessagesPage() {
     toast({ title: `Payment check complete (${msgsToCheck.length} messages)` });
   };
 
+  const handleSyncDataCv = async () => {
+    if (!baseMessages || baseMessages.length === 0) return;
+    const msgsToSync = baseMessages.filter((msg) => passesBaseFilters(msg));
+    if (msgsToSync.length === 0) {
+      toast({ title: "No messages to sync", variant: "destructive" });
+      return;
+    }
+    setCvSyncLoading(true);
+    setCvSyncProgress({ done: 0, total: msgsToSync.length });
+    const newMap: typeof cvDataMap = {};
+    const CONCURRENCY = 3;
+
+    for (let i = 0; i < msgsToSync.length; i += CONCURRENCY) {
+      const batch = msgsToSync.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(async (msg) => {
+          const extracted = extractCaseFromSlackMsg(msg.text);
+          if (!extracted || !extracted.link) {
+            return { ts: msg.ts, data: { found: false, error: "No case link found" } as typeof cvDataMap[string] };
+          }
+          try {
+            const res = await apiRequest("POST", "/api/carevalidate/lookup-case", {
+              link: extracted.link,
+            });
+            const result = await res.json();
+            return { ts: msg.ts, data: result as typeof cvDataMap[string] };
+          } catch (err: any) {
+            const msg401 = err.message?.includes("401") || err.message?.includes("expired");
+            return { ts: msg.ts, data: { found: false, error: msg401 ? "Token expired" : (err.message || "Lookup failed") } as typeof cvDataMap[string] };
+          }
+        })
+      );
+      let tokenExpired = false;
+      for (const r of results) {
+        if (r.status === "fulfilled") {
+          newMap[r.value.ts] = r.value.data;
+          if (r.value.data.error === "Token expired") tokenExpired = true;
+        }
+      }
+      setCvSyncProgress((prev) => ({ ...prev, done: Math.min(prev.done + batch.length, msgsToSync.length) }));
+      if (tokenExpired) {
+        toast({ title: "CareValidate token expired. Please update it in CV Report.", variant: "destructive" });
+        break;
+      }
+    }
+    setCvDataMap(newMap);
+    setCvSyncLoading(false);
+    const successCount = Object.values(newMap).filter(d => d.found).length;
+    toast({ title: `CV sync complete — ${successCount}/${msgsToSync.length} found` });
+  };
+
   const filteredMessages = baseMessages.filter((msg) => {
     if (!passesBaseFilters(msg)) return false;
     if (replyFilters.length > 0) {
@@ -1597,9 +1651,20 @@ export default function SlackMessagesPage() {
             variant="outline"
             size="sm"
             data-testid="button-sync-data-cv"
+            onClick={handleSyncDataCv}
+            disabled={cvSyncLoading}
           >
-            <Database className="h-3.5 w-3.5 mr-1" />
-            Sync Data CV
+            {cvSyncLoading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                Syncing... ({cvSyncProgress.done}/{cvSyncProgress.total})
+              </>
+            ) : (
+              <>
+                <Database className="h-3.5 w-3.5 mr-1" />
+                Sync Data CV
+              </>
+            )}
           </Button>
           <Button
             variant="outline"
@@ -1675,6 +1740,7 @@ export default function SlackMessagesPage() {
               isSelected={selectedMessages.has(msg.ts)}
               onToggleSelect={() => toggleSelectMessage(msg.ts)}
               paymentData={paymentsMap[msg.ts]}
+              cvData={cvDataMap[msg.ts]}
             />
           ))}
         </div>
@@ -1960,6 +2026,7 @@ function MessageCard({
   isSelected,
   onToggleSelect,
   paymentData,
+  cvData,
   expandIndex = 0,
 }: {
   msg: SlackMessage;
@@ -1986,6 +2053,7 @@ function MessageCard({
   isSelected?: boolean;
   onToggleSelect?: () => void;
   paymentData?: { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string };
+  cvData?: { name?: string; email?: string; status?: string; found?: boolean; error?: string };
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -2306,17 +2374,17 @@ function MessageCard({
           <div data-testid={`panel-cv-${msg.ts}`}>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">CV</h4>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-1">
                 <span className="text-muted-foreground">Name</span>
-                <span className="font-medium text-foreground" data-testid={`cv-name-${msg.ts}`}>—</span>
+                <span className="font-medium text-foreground truncate max-w-[160px]" title={cvData?.name || ""} data-testid={`cv-name-${msg.ts}`}>{cvData?.found ? (cvData.name || "—") : "—"}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-1">
                 <span className="text-muted-foreground">Email</span>
-                <span className="font-medium text-foreground" data-testid={`cv-email-${msg.ts}`}>—</span>
+                <span className="font-medium text-foreground truncate max-w-[160px]" title={cvData?.email || ""} data-testid={`cv-email-${msg.ts}`}>{cvData?.found ? (cvData.email || "—") : "—"}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-1">
                 <span className="text-muted-foreground">Status</span>
-                <span className="font-medium text-foreground" data-testid={`cv-status-${msg.ts}`}>—</span>
+                <span className={`font-medium truncate max-w-[160px] ${cvData?.found && cvData.status ? (cvData.status.toLowerCase().includes("approved") ? "text-green-600 dark:text-green-400" : cvData.status.toLowerCase().includes("closed") || cvData.status.toLowerCase().includes("denied") ? "text-red-600 dark:text-red-400" : "text-foreground") : "text-foreground"}`} data-testid={`cv-status-${msg.ts}`}>{cvData?.found ? (cvData.status || "—") : cvData?.error ? <span className="text-red-500 text-[10px]">{cvData.error}</span> : "—"}</span>
               </div>
             </div>
           </div>

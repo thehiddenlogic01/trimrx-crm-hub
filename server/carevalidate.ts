@@ -370,4 +370,33 @@ export function setupCareValidateRoutes(app: Express) {
       res.status(500).json({ message: err.message || "Failed to fetch case data" });
     }
   });
+
+  app.post("/api/carevalidate/lookup-case", async (req, res) => {
+    try {
+      const { link } = req.body;
+      if (!link) return res.status(400).json({ message: "Link is required" });
+
+      const token = await storage.getSetting("carevalidate_token");
+      if (!token) return res.status(400).json({ message: "CareValidate token not configured" });
+
+      const caseUUID = extractCaseUUID(link);
+      if (!caseUUID) return res.status(400).json({ message: "Could not extract case UUID from link" });
+
+      const caseData = await fetchCaseData(caseUUID, token);
+      if (!caseData) return res.json({ found: false, message: "Case not found" });
+
+      const submitter = caseData.submitter;
+      const name = submitter?.fullName || [submitter?.firstName, submitter?.lastName].filter(Boolean).join(" ") || "";
+      const email = submitter?.email || "";
+      const status = buildDetailedStatus(caseData);
+
+      res.json({ found: true, name, email, status, caseId: caseData.shortId || "" });
+    } catch (err: any) {
+      console.error("[carevalidate] lookup-case error:", err.message);
+      if (err.message?.includes("401") || err.message?.includes("403")) {
+        return res.status(401).json({ message: "Token expired or invalid" });
+      }
+      res.status(500).json({ message: err.message || "Failed to look up case" });
+    }
+  });
 }
