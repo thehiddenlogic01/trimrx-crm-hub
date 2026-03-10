@@ -1543,6 +1543,14 @@ export default function SlackMessagesPage() {
             <Database className="h-3.5 w-3.5 mr-1" />
             Sync Data CV
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="button-tracker-data-sync"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+            Tracker Data Sync
+          </Button>
         </div>
       </div>
 
