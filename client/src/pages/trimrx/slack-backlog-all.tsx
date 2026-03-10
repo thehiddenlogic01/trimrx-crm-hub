@@ -711,6 +711,8 @@ export default function SlackMessagesPage() {
   const [cvDataMap, setCvDataMap] = useState<Record<string, { name?: string; email?: string; status?: string; found?: boolean; error?: string }>>({});
   const [cvSyncLoading, setCvSyncLoading] = useState(false);
   const [cvSyncProgress, setCvSyncProgress] = useState({ done: 0, total: 0 });
+  const [lastPulledTime, setLastPulledTime] = useState<Date | null>(null);
+  const [pullAllLoading, setPullAllLoading] = useState(false);
 
   const { data: slackStatus } = useQuery<{ connected: boolean; team?: string }>({
     queryKey: ["/api/slack/status"],
@@ -1176,6 +1178,7 @@ export default function SlackMessagesPage() {
         resultMap[lq.msgTs] = data.results?.[lq.query] || null;
       }
       setTrackerMatchMap(resultMap);
+      setLastPulledTime(new Date());
       const foundCount = Object.values(resultMap).filter((v) => v !== null).length;
       const notFoundCount = Object.values(resultMap).filter((v) => v === null).length;
       toast({ title: `Match Data: ${foundCount} in tracker, ${notFoundCount} not found` });
@@ -1227,6 +1230,17 @@ export default function SlackMessagesPage() {
     setReplyFilterMatchedMap({});
   };
 
+  const handlePullAll = async () => {
+    setPullAllLoading(true);
+    await Promise.all([
+      handleCheckAllPayments(),
+      handleSyncDataCv(),
+      matchTrackerData(),
+    ]);
+    setPullAllLoading(false);
+    setLastPulledTime(new Date());
+  };
+
   const handleCheckAllPayments = async () => {
     if (!baseMessages || baseMessages.length === 0) return;
     const msgsToCheck = baseMessages.filter((msg) => passesBaseFilters(msg));
@@ -1268,6 +1282,7 @@ export default function SlackMessagesPage() {
     }
     setPaymentsMap(newMap);
     setPaymentsLoading(false);
+    setLastPulledTime(new Date());
     toast({ title: `Payment check complete (${msgsToCheck.length} messages)` });
   };
 
@@ -1318,6 +1333,7 @@ export default function SlackMessagesPage() {
     }
     setCvDataMap(newMap);
     setCvSyncLoading(false);
+    setLastPulledTime(new Date());
     const successCount = Object.values(newMap).filter(d => d.found).length;
     toast({ title: `CV sync complete — ${successCount}/${msgsToSync.length} found` });
   };
@@ -1752,6 +1768,9 @@ export default function SlackMessagesPage() {
               onToggleSelect={() => toggleSelectMessage(msg.ts)}
               paymentData={paymentsMap[msg.ts]}
               cvData={cvDataMap[msg.ts]}
+              lastPulledTime={lastPulledTime}
+              onPullAll={handlePullAll}
+              pullAllLoading={pullAllLoading}
             />
           ))}
         </div>
@@ -2038,6 +2057,9 @@ function MessageCard({
   onToggleSelect,
   paymentData,
   cvData,
+  lastPulledTime,
+  onPullAll,
+  pullAllLoading,
   expandIndex = 0,
 }: {
   msg: SlackMessage;
@@ -2065,6 +2087,9 @@ function MessageCard({
   onToggleSelect?: () => void;
   paymentData?: { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string };
   cvData?: { name?: string; email?: string; status?: string; found?: boolean; error?: string };
+  lastPulledTime?: Date | null;
+  onPullAll?: () => void;
+  pullAllLoading?: boolean;
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -2382,6 +2407,24 @@ function MessageCard({
         </div>
 
         <div className="w-[280px] flex-shrink-0 border-l pl-3 space-y-3">
+          {lastPulledTime && (
+            <div className="flex items-center justify-between gap-1 pb-1 border-b">
+              <span className="text-[10px] text-muted-foreground" data-testid={`last-pulled-${msg.ts}`}>
+                Last pulled: {lastPulledTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 px-1.5 text-[10px]"
+                onClick={onPullAll}
+                disabled={pullAllLoading}
+                data-testid={`button-pull-again-${msg.ts}`}
+              >
+                {pullAllLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                <span className="ml-0.5">Pull again</span>
+              </Button>
+            </div>
+          )}
           <div data-testid={`panel-cv-${msg.ts}`}>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">CV</h4>
             <div className="space-y-1 text-xs">
