@@ -712,7 +712,7 @@ export default function SlackMessagesPage() {
   const [cvSyncLoading, setCvSyncLoading] = useState(false);
   const [cvSyncProgress, setCvSyncProgress] = useState({ done: 0, total: 0 });
   const [lastPulledTime, setLastPulledTime] = useState<Date | null>(null);
-  const [pullAllLoading, setPullAllLoading] = useState(false);
+  const [lastPulledPerMsg, setLastPulledPerMsg] = useState<Record<string, Date>>({});
 
   const { data: slackStatus } = useQuery<{ connected: boolean; team?: string }>({
     queryKey: ["/api/slack/status"],
@@ -1178,7 +1178,13 @@ export default function SlackMessagesPage() {
         resultMap[lq.msgTs] = data.results?.[lq.query] || null;
       }
       setTrackerMatchMap(resultMap);
-      setLastPulledTime(new Date());
+      const now = new Date();
+      setLastPulledTime(now);
+      setLastPulledPerMsg((prev) => {
+        const updated = { ...prev };
+        for (const lq of linkQueries) updated[lq.msgTs] = now;
+        return updated;
+      });
       const foundCount = Object.values(resultMap).filter((v) => v !== null).length;
       const notFoundCount = Object.values(resultMap).filter((v) => v === null).length;
       toast({ title: `Match Data: ${foundCount} in tracker, ${notFoundCount} not found` });
@@ -1230,15 +1236,52 @@ export default function SlackMessagesPage() {
     setReplyFilterMatchedMap({});
   };
 
-  const handlePullAll = async () => {
-    setPullAllLoading(true);
-    await Promise.all([
-      handleCheckAllPayments(),
-      handleSyncDataCv(),
-      matchTrackerData(),
-    ]);
-    setPullAllLoading(false);
-    setLastPulledTime(new Date());
+  const handlePullSingle = async (msg: SlackMessage) => {
+    const extracted = extractCaseFromSlackMsg(msg.text);
+
+    const cvPromise = (async () => {
+      if (!extracted?.link) return { found: false, error: "No case link found" };
+      try {
+        const res = await apiRequest("POST", "/api/carevalidate/lookup-case", { link: extracted.link });
+        return await res.json();
+      } catch (err: any) {
+        return { found: false, error: err.message || "Lookup failed" };
+      }
+    })();
+
+    const paymentPromise = (async () => {
+      if (!extracted || (!extracted.link && !extracted.caseId)) return { found: false, message: "No case link or ID found" };
+      try {
+        const res = await apiRequest("POST", "/api/stripe-payments/lookup-by-case", {
+          caseLink: extracted.link || undefined,
+          caseId: extracted.caseId || undefined,
+        });
+        return await res.json();
+      } catch (err: any) {
+        return { found: false, error: err.message || "Lookup failed" };
+      }
+    })();
+
+    const trackerPromise = (async () => {
+      const query = extracted?.link || extracted?.caseId;
+      if (!query) return null;
+      try {
+        const res = await apiRequest("POST", "/api/pt-finder/batch-search", { queries: [query] });
+        const data = await res.json();
+        return data.results?.[query] || null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const [cvResult, paymentResult, trackerResult] = await Promise.all([cvPromise, paymentPromise, trackerPromise]);
+
+    setCvDataMap((prev) => ({ ...prev, [msg.ts]: cvResult }));
+    setPaymentsMap((prev) => ({ ...prev, [msg.ts]: paymentResult }));
+    setTrackerMatchMap((prev) => ({ ...prev, [msg.ts]: trackerResult }));
+    const now = new Date();
+    setLastPulledTime(now);
+    setLastPulledPerMsg((prev) => ({ ...prev, [msg.ts]: now }));
   };
 
   const handleCheckAllPayments = async () => {
@@ -1282,7 +1325,13 @@ export default function SlackMessagesPage() {
     }
     setPaymentsMap(newMap);
     setPaymentsLoading(false);
-    setLastPulledTime(new Date());
+    const now2 = new Date();
+    setLastPulledTime(now2);
+    setLastPulledPerMsg((prev) => {
+      const updated = { ...prev };
+      for (const m of msgsToCheck) updated[m.ts] = now2;
+      return updated;
+    });
     toast({ title: `Payment check complete (${msgsToCheck.length} messages)` });
   };
 
@@ -1333,7 +1382,13 @@ export default function SlackMessagesPage() {
     }
     setCvDataMap(newMap);
     setCvSyncLoading(false);
-    setLastPulledTime(new Date());
+    const now3 = new Date();
+    setLastPulledTime(now3);
+    setLastPulledPerMsg((prev) => {
+      const updated = { ...prev };
+      for (const m of msgsToSync) updated[m.ts] = now3;
+      return updated;
+    });
     const successCount = Object.values(newMap).filter(d => d.found).length;
     toast({ title: `CV sync complete — ${successCount}/${msgsToSync.length} found` });
   };
@@ -1768,9 +1823,8 @@ export default function SlackMessagesPage() {
               onToggleSelect={() => toggleSelectMessage(msg.ts)}
               paymentData={paymentsMap[msg.ts]}
               cvData={cvDataMap[msg.ts]}
-              lastPulledTime={lastPulledTime}
-              onPullAll={handlePullAll}
-              pullAllLoading={pullAllLoading}
+              lastPulledTime={lastPulledPerMsg[msg.ts] || lastPulledTime}
+              onPullSingle={handlePullSingle}
             />
           ))}
         </div>
@@ -2058,8 +2112,7 @@ function MessageCard({
   paymentData,
   cvData,
   lastPulledTime,
-  onPullAll,
-  pullAllLoading,
+  onPullSingle,
   expandIndex = 0,
 }: {
   msg: SlackMessage;
@@ -2088,8 +2141,7 @@ function MessageCard({
   paymentData?: { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string };
   cvData?: { name?: string; email?: string; status?: string; found?: boolean; error?: string };
   lastPulledTime?: Date | null;
-  onPullAll?: () => void;
-  pullAllLoading?: boolean;
+  onPullSingle?: (msg: SlackMessage) => Promise<void>;
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -2101,6 +2153,7 @@ function MessageCard({
   const slackLink = `https://app.slack.com/client/${WORKSPACE_ID}/${channelId}/p${msg.ts.replace(".", "")}`;
   const [sendingCv, setSendingCv] = useState(false);
   const [cvSent, setCvSent] = useState(false);
+  const [pullingSingle, setPullingSingle] = useState(false);
 
   const [expandReady, setExpandReady] = useState(!expandAllReplies);
   useEffect(() => {
@@ -2416,11 +2469,17 @@ function MessageCard({
                 variant="ghost"
                 size="sm"
                 className="h-5 px-1.5 text-[10px]"
-                onClick={onPullAll}
-                disabled={pullAllLoading}
+                onClick={async () => {
+                  if (onPullSingle) {
+                    setPullingSingle(true);
+                    await onPullSingle(msg);
+                    setPullingSingle(false);
+                  }
+                }}
+                disabled={pullingSingle}
                 data-testid={`button-pull-again-${msg.ts}`}
               >
-                {pullAllLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                {pullingSingle ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                 <span className="ml-0.5">Pull again</span>
               </Button>
             </div>
