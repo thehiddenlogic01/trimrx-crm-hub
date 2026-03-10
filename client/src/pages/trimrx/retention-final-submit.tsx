@@ -55,7 +55,7 @@ import {
   Eye, EyeOff, CheckCircle2, MessageSquare, CheckSquare, XCircle,
   Send, MessageCircle, ChevronUp, ChevronDown, CreditCard, DollarSign,
   AlertCircle, FileText, CornerDownRight, Undo2, Trash2, Check, X,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Pencil,
 } from "lucide-react";
 import type { CvReport } from "@shared/schema";
 
@@ -461,6 +461,134 @@ function InlineSubReasonDropdownCell({ reportId, value }: { reportId: number; va
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+function SheetNotesEditor({ reportId, value, onUpdated }: { reportId: number; value: string; onUpdated: (v: string) => void }) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+
+  useEffect(() => { setEditValue(value); }, [value]);
+
+  const updateMutation = useMutation({
+    mutationFn: async (newValue: string) => {
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, { notesTrimrx: newValue });
+      return await res.json();
+    },
+    onMutate: (newValue: string) => {
+      const prev = optimisticUpdate(reportId, "notesTrimrx", newValue);
+      onUpdated(newValue);
+      setEditing(false);
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update notes", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  if (editing) {
+    return (
+      <div className="space-y-2" data-testid="sheet-notes-editor">
+        <label className="text-xs font-medium text-muted-foreground">Notes TrimRX</label>
+        <Textarea
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          className="text-xs min-h-[80px] resize-y"
+          data-testid="input-sheet-notes"
+          autoFocus
+        />
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => updateMutation.mutate(editValue)}
+            disabled={updateMutation.isPending}
+            data-testid="button-save-sheet-notes"
+          >
+            {updateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Check className="h-3 w-3 mr-1" />}
+            Save
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => { setEditValue(value); setEditing(false); }}
+            disabled={updateMutation.isPending}
+            data-testid="button-cancel-sheet-notes"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="group cursor-pointer rounded-md border border-transparent hover:border-border p-2 -m-2 transition-colors"
+      onClick={() => setEditing(true)}
+      data-testid="display-sheet-notes"
+    >
+      <div className="flex items-center gap-1 mb-1">
+        <span className="text-xs font-medium text-muted-foreground">Notes TrimRX</span>
+        <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+      <p className="text-xs whitespace-pre-wrap leading-relaxed text-foreground">
+        {value || <span className="text-muted-foreground italic">No notes — click to add</span>}
+      </p>
+    </div>
+  );
+}
+
+function SheetSlackStatusEditor({ reportId, value, options, onUpdated }: { reportId: number; value: string; options: string[]; onUpdated: (v: string) => void }) {
+  const { toast } = useToast();
+
+  const updateMutation = useMutation({
+    mutationFn: async (newValue: string) => {
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, { slackStatusRt: newValue });
+      return await res.json();
+    },
+    onMutate: (newValue: string) => {
+      const prev = optimisticUpdate(reportId, "slackStatusRt", newValue);
+      onUpdated(newValue);
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update status", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  return (
+    <div className="flex items-center gap-2" data-testid="sheet-slack-status-editor">
+      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Slack Status</span>
+      <Select
+        value={value || ""}
+        onValueChange={(val) => {
+          const newVal = val === "__clear__" ? "" : val;
+          if (newVal !== value) updateMutation.mutate(newVal);
+        }}
+      >
+        <SelectTrigger className="h-7 text-xs w-[160px]" data-testid="select-sheet-slack-status">
+          <SelectValue placeholder="— Select —" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__clear__"><span className="text-muted-foreground">Clear</span></SelectItem>
+          {options.map((opt) => (
+            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {updateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+    </div>
   );
 }
 
@@ -2100,16 +2228,28 @@ export default function RetentionFinalSubmitPage() {
                 </Button>
               )}
             </SheetTitle>
-            <SheetDescription>
-              {selectedReport?.notesTrimrx
-                ? selectedReport.notesTrimrx.length > 80
-                  ? selectedReport.notesTrimrx.slice(0, 80) + "..."
-                  : selectedReport.notesTrimrx
-                : "Slack message for this case"}
+            <SheetDescription asChild>
+              <div className="space-y-3 mt-2">
+                <SheetNotesEditor
+                  reportId={selectedReport?.id ?? 0}
+                  value={selectedReport?.notesTrimrx ?? ""}
+                  onUpdated={(newVal) => {
+                    setSelectedReport(prev => prev ? { ...prev, notesTrimrx: newVal } : prev);
+                  }}
+                />
+                <SheetSlackStatusEditor
+                  reportId={selectedReport?.id ?? 0}
+                  value={selectedReport?.slackStatusRt ?? ""}
+                  options={SLACK_STATUS_RT_OPTIONS}
+                  onUpdated={(newVal) => {
+                    setSelectedReport(prev => prev ? { ...prev, slackStatusRt: newVal } : prev);
+                  }}
+                />
+              </div>
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-6">
+          <div className="mt-4">
             {selectedSlackLoading && !selectedSlackMsg ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin mb-3" />
