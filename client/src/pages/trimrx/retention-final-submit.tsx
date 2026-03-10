@@ -592,6 +592,68 @@ function SheetSlackStatusEditor({ reportId, value, options, onUpdated }: { repor
   );
 }
 
+function SheetSubReasonEditor({ reportId, value, onUpdated }: { reportId: number; value: string; onUpdated: (v: string, reason: string) => void }) {
+  const { toast } = useToast();
+
+  const updateMutation = useMutation({
+    mutationFn: async (newSubReason: string) => {
+      const parentReason = newSubReason ? getReasonForSubReason(newSubReason) : null;
+      const body: Record<string, string> = { subReason: newSubReason };
+      if (parentReason) body.reason = parentReason;
+      if (!newSubReason) body.reason = "";
+      const res = await apiRequest("PATCH", `/api/cv-reports/${reportId}`, body);
+      return await res.json();
+    },
+    onMutate: (newSubReason: string) => {
+      const parentReason = newSubReason ? getReasonForSubReason(newSubReason) : null;
+      const prev = queryClient.getQueryData<CvReport[]>(["/api/cv-reports"]);
+      if (prev) {
+        queryClient.setQueryData<CvReport[]>(["/api/cv-reports"],
+          prev.map((r) => r.id === reportId ? { ...r, subReason: newSubReason, ...(parentReason ? { reason: parentReason } : newSubReason ? {} : { reason: "" }) } : r)
+        );
+      }
+      onUpdated(newSubReason, parentReason || (newSubReason ? "" : ""));
+      return { prev };
+    },
+    onError: (err: Error, _v, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/cv-reports"], context.prev);
+      toast({ title: "Failed to update sub-reason", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/cv-reports"] });
+    },
+  });
+
+  return (
+    <div className="flex items-center gap-2" data-testid="sheet-sub-reason-editor">
+      <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Sub-Reason</span>
+      <Select
+        value={value || ""}
+        onValueChange={(val) => {
+          const newVal = val === "__clear__" ? "" : val;
+          if (newVal !== value) updateMutation.mutate(newVal);
+        }}
+      >
+        <SelectTrigger className="h-7 text-xs w-[200px]" data-testid="select-sheet-sub-reason">
+          <SelectValue placeholder="— Select —" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__clear__"><span className="text-muted-foreground">Clear</span></SelectItem>
+          {Object.entries(REASON_SUBREASON_MAP).map(([reason, subs]) => (
+            <div key={reason}>
+              <div className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{reason}</div>
+              {subs.map((sub) => (
+                <SelectItem key={sub} value={sub}>{sub}</SelectItem>
+              ))}
+            </div>
+          ))}
+        </SelectContent>
+      </Select>
+      {updateMutation.isPending && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+    </div>
+  );
+}
+
 function InlineMultiDropdownCell({ reportId, colKey, value, options }: { reportId: number; colKey: ColumnKey; value: string; options: string[] }) {
   const { toast } = useToast();
   const selected = useMemo(() => value ? value.split(",").map((v) => v.trim()).filter(Boolean) : [], [value]);
@@ -2237,14 +2299,23 @@ export default function RetentionFinalSubmitPage() {
                     setSelectedReport(prev => prev ? { ...prev, notesTrimrx: newVal } : prev);
                   }}
                 />
-                <SheetSlackStatusEditor
-                  reportId={selectedReport?.id ?? 0}
-                  value={selectedReport?.slackStatusRt ?? ""}
-                  options={SLACK_STATUS_RT_OPTIONS}
-                  onUpdated={(newVal) => {
-                    setSelectedReport(prev => prev ? { ...prev, slackStatusRt: newVal } : prev);
-                  }}
-                />
+                <div className="flex items-center gap-4 flex-wrap">
+                  <SheetSlackStatusEditor
+                    reportId={selectedReport?.id ?? 0}
+                    value={selectedReport?.slackStatusRt ?? ""}
+                    options={SLACK_STATUS_RT_OPTIONS}
+                    onUpdated={(newVal) => {
+                      setSelectedReport(prev => prev ? { ...prev, slackStatusRt: newVal } : prev);
+                    }}
+                  />
+                  <SheetSubReasonEditor
+                    reportId={selectedReport?.id ?? 0}
+                    value={selectedReport?.subReason ?? ""}
+                    onUpdated={(newSubReason, parentReason) => {
+                      setSelectedReport(prev => prev ? { ...prev, subReason: newSubReason, ...(parentReason ? { reason: parentReason } : {}) } : prev);
+                    }}
+                  />
+                </div>
               </div>
             </SheetDescription>
           </SheetHeader>
