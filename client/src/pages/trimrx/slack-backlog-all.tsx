@@ -241,6 +241,17 @@ interface ExtractedCase {
   msgTs: string;
 }
 
+function getTrackerField(record: Record<string, string>, ...names: string[]): string {
+  for (const name of names) {
+    for (const key of Object.keys(record)) {
+      if (key.trim().toLowerCase() === name.trim().toLowerCase()) {
+        return record[key] || "";
+      }
+    }
+  }
+  return "";
+}
+
 function extractCaseFromSlackMsg(text: string): ExtractedCase | null {
   let caseId = "";
   let link = "";
@@ -2464,31 +2475,31 @@ function MessageCard({
             {showTrackerStatus && trackerMatch && (
               <div className="mt-2 flex items-center gap-2 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded px-2.5 py-1.5 text-xs flex-wrap" data-testid={`tracker-info-${msg.ts}`}>
                 <Database className="h-3.5 w-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
-                {(trackerMatch["Customer Email"] || trackerMatch["Email"] || trackerMatch["email"]) && (
-                  <span><strong>Email:</strong> {trackerMatch["Customer Email"] || trackerMatch["Email"] || trackerMatch["email"]}</span>
+                {getTrackerField(trackerMatch, "Customer Email", "Customer Email.", "Email", "email") && (
+                  <span><strong>Email:</strong> {getTrackerField(trackerMatch, "Customer Email", "Customer Email.", "Email", "email")}</span>
                 )}
-                {(trackerMatch["Agent Assigned"] || trackerMatch["agent_assigned"]) && (
+                {getTrackerField(trackerMatch, "Agent Assigned", "agent_assigned") && (
                   <>
                     <span className="text-muted-foreground">•</span>
-                    <span><strong>Agent:</strong> {trackerMatch["Agent Assigned"] || trackerMatch["agent_assigned"]}</span>
+                    <span><strong>Agent:</strong> {getTrackerField(trackerMatch, "Agent Assigned", "agent_assigned")}</span>
                   </>
                 )}
-                {(trackerMatch["Request Status"] || trackerMatch["Status"] || trackerMatch["status"]) && (
+                {getTrackerField(trackerMatch, "Request Status", "Status", "status") && (
                   <>
                     <span className="text-muted-foreground">•</span>
-                    <span><strong>Status:</strong> {trackerMatch["Request Status"] || trackerMatch["Status"] || trackerMatch["status"]}</span>
+                    <span><strong>Status:</strong> {getTrackerField(trackerMatch, "Request Status", "Status", "status")}</span>
                   </>
                 )}
-                {(trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"]) && (
+                {getTrackerField(trackerMatch, "OUTCOME", "Outcome", "outcome") && (
                   <>
                     <span className="text-muted-foreground">•</span>
-                    <span><strong>Outcome:</strong> {trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"]}</span>
+                    <span><strong>Outcome:</strong> {getTrackerField(trackerMatch, "OUTCOME", "Outcome", "outcome")}</span>
                   </>
                 )}
-                {(trackerMatch["TICKET COMPLETION DATE"] || trackerMatch["Completion Date"]) && (
+                {getTrackerField(trackerMatch, "TICKET COMPLETION DATE", "Completion Date") && (
                   <>
                     <span className="text-muted-foreground">•</span>
-                    <span><strong>Completed:</strong> {trackerMatch["TICKET COMPLETION DATE"] || trackerMatch["Completion Date"]}</span>
+                    <span><strong>Completed:</strong> {getTrackerField(trackerMatch, "TICKET COMPLETION DATE", "Completion Date")}</span>
                   </>
                 )}
               </div>
@@ -2600,18 +2611,18 @@ function MessageCard({
             <div className="space-y-1 text-xs">
               <div className="flex justify-between gap-1">
                 <span className="text-muted-foreground">Agent Assigned</span>
-                <span className="font-medium text-foreground truncate max-w-[160px]" title={trackerMatch ? (trackerMatch["Agent Assigned"] || trackerMatch["agent_assigned"] || "") : ""} data-testid={`tracker-agent-${msg.ts}`}>{trackerMatch ? (trackerMatch["Agent Assigned"] || trackerMatch["agent_assigned"] || "—") : "—"}</span>
+                <span className="font-medium text-foreground truncate max-w-[160px]" title={trackerMatch ? getTrackerField(trackerMatch, "Agent Assigned", "agent_assigned") : ""} data-testid={`tracker-agent-${msg.ts}`}>{trackerMatch ? (getTrackerField(trackerMatch, "Agent Assigned", "agent_assigned") || "—") : "—"}</span>
               </div>
               <div className="flex justify-between gap-1">
                 <span className="text-muted-foreground">Outcome</span>
-                <span className="font-medium text-foreground truncate max-w-[160px]" title={trackerMatch ? (trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"] || "") : ""} data-testid={`tracker-outcome-${msg.ts}`}>{trackerMatch ? (trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"] || "—") : "—"}</span>
+                <span className="font-medium text-foreground truncate max-w-[160px]" title={trackerMatch ? getTrackerField(trackerMatch, "OUTCOME", "Outcome", "outcome") : ""} data-testid={`tracker-outcome-${msg.ts}`}>{trackerMatch ? (getTrackerField(trackerMatch, "OUTCOME", "Outcome", "outcome") || "—") : "—"}</span>
               </div>
               <div className="flex justify-between gap-2 relative group/notes">
                 <span className="text-muted-foreground whitespace-nowrap">TrimRx Agent Notes</span>
-                <span className="font-medium text-foreground text-right truncate max-w-[140px] cursor-default" data-testid={`tracker-notes-${msg.ts}`}>{trackerMatch ? (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"] || "—") : "—"}</span>
-                {trackerMatch && (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"]) && (
+                <span className="font-medium text-foreground text-right truncate max-w-[140px] cursor-default" data-testid={`tracker-notes-${msg.ts}`}>{trackerMatch ? (getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes", "Notes") || "—") : "—"}</span>
+                {trackerMatch && getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes", "Notes") && (
                   <div className="hidden group-hover/notes:block absolute right-0 top-full mt-1 z-50 w-[300px] p-3 rounded-lg shadow-lg bg-yellow-50 dark:bg-yellow-950/40 border border-yellow-200 dark:border-yellow-800 text-sm text-foreground whitespace-pre-wrap break-words">
-                    {trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"]}
+                    {getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes", "Notes")}
                   </div>
                 )}
               </div>

@@ -121,7 +121,8 @@ export function setupPtFinderRoutes(app: Express) {
         return res.json({ results: [], headers: [] });
       }
 
-      const headers = allRows[config.headerRow - 1] || [];
+      const rawHeaders = allRows[config.headerRow - 1] || [];
+      const headers = rawHeaders.map((h: string) => h.trim());
       const dataRows = allRows.slice(config.headerRow);
 
       const searchTerms = query.toLowerCase().trim().split(/\s+/);
@@ -167,7 +168,8 @@ export function setupPtFinderRoutes(app: Express) {
         return res.json({ results: {} });
       }
 
-      const headers = allRows[config.headerRow - 1] || [];
+      const rawHeaders = allRows[config.headerRow - 1] || [];
+      const headers = rawHeaders.map((h: string) => h.trim());
       const dataRows = allRows.slice(config.headerRow);
 
       const results: Record<string, Record<string, string> | null> = {};
