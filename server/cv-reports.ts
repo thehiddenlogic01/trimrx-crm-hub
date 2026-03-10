@@ -192,6 +192,7 @@ export function setupCvReportRoutes(app: Express) {
   });
 
   app.post("/api/custom-gpt/analyze", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) return res.status(401).json({ message: "Not authenticated" });
     try {
       const { concern } = req.body;
       if (!concern?.trim()) {
@@ -434,6 +435,186 @@ export function setupCvReportRoutes(app: Express) {
     } catch (err: any) {
       console.error("GPT analysis error:", err);
       res.status(500).json({ message: err.message || "Failed to analyze" });
+    }
+  });
+
+  app.post("/api/custom-gpt/analyze-batch", async (req, res) => {
+    if (!req.isAuthenticated() || !req.user) return res.status(401).json({ message: "Not authenticated" });
+    try {
+      const { cases } = req.body;
+      if (!Array.isArray(cases) || cases.length === 0) {
+        return res.status(400).json({ message: "cases array is required" });
+      }
+      if (cases.length > 10) {
+        return res.status(400).json({ message: "Max 10 cases per batch" });
+      }
+
+      const instructions = await storage.getSetting("custom_gpt_instructions");
+      if (!instructions) {
+        return res.status(400).json({ message: "No custom GPT instructions configured" });
+      }
+
+      const examplesRaw = await storage.getSetting("custom_gpt_examples");
+      let allExamples: any[] = [];
+      try { allExamples = examplesRaw ? JSON.parse(examplesRaw) : []; } catch {}
+
+      let examplesBlock = "";
+      if (allExamples.length > 0) {
+        const allConcernsLower = cases.map((c: any) => (c.concern || "").toLowerCase()).join(" ");
+        const scored = allExamples.map((ex: any) => {
+          const exLower = (ex.concern || "").toLowerCase();
+          const words = allConcernsLower.split(/\s+/).filter((w: string) => w.length > 3);
+          const matchCount = words.filter((w: string) => exLower.includes(w)).length;
+          return { ...ex, score: matchCount };
+        });
+        scored.sort((a: any, b: any) => b.score - a.score);
+        const topExamples = scored.slice(0, 15);
+        const reasonCounts: Record<string, number> = {};
+        topExamples.forEach((ex: any) => { reasonCounts[ex.reason] = (reasonCounts[ex.reason] || 0) + 1; });
+        const underrepresented = allExamples.filter((ex: any) => !topExamples.some((t: any) => t.concern === ex.concern) && (reasonCounts[ex.reason] || 0) < 3);
+        const extras = underrepresented.slice(0, 5);
+        const finalExamples = [...topExamples, ...extras];
+
+        examplesBlock = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nREFERENCE EXAMPLES — Use these as ground truth for classification.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
+        examplesBlock += finalExamples.map((ex: any, i: number) => {
+          const truncatedConcern = (ex.concern || "").length > 200 ? (ex.concern as string).slice(0, 200) + "..." : (ex.concern || "");
+          return `Example ${i + 1}:\nConcern: "${truncatedConcern}"\n→ Reason: ${ex.reason}\n→ Sub-Reason: ${ex.subReason}\n→ Desired Action: ${ex.desiredAction}`;
+        }).join("\n\n");
+      }
+
+      const coreExamples = [
+        { concern: "Downgrade and refund needed. 12 months $2999\nRefund amount $2,051", reason: "Uncategorized", subReason: "Other", desiredAction: "Refund" },
+        { concern: "Cancel and refund needed. 12 months $2999 (Captured)\nEPC $298\nRefund amount $2,701", reason: "Uncategorized", subReason: "Other", desiredAction: "Refund and Cancel" },
+        { concern: "Cancel and Refund\n*EPC* $88\nRefund less EPC $88 Refund amount $860", reason: "Uncategorized", subReason: "Other", desiredAction: "Refund and Cancel" },
+      ];
+      const coreBlock = "\n\nCORE EXAMPLES:\n" +
+        coreExamples.map((ex, i) =>
+          `Core ${i + 1}: "${ex.concern}" → ${ex.reason} / ${ex.subReason} / ${ex.desiredAction}`
+        ).join("\n");
+      examplesBlock += coreBlock;
+
+      const subReasonDefs = [
+        "SUB-REASON DEFINITIONS:",
+        "",
+        "FINANCIAL & PRICING: Competitor Price, Bundle Misunderstanding, Financial Hardship, Month 2 Refill Price, Insurance Expectation, Subscription Misunderstanding, Billing Error (NO ads/quoted prices), Duplicate Payment, Branded Medication Affordability, Promotional Pricing Discrepancy (ad/quoted vs charged mismatch)",
+        "",
+        "CLINICAL & HEALTH: Severe Side Effects, Low Efficacy, Goal Reached, Medical Concerns, Disqualified, Injection/Vial Aversion, Dosing Issues",
+        "",
+        "LOGISTICS & SUPPLY: Fulfillment Latency, Order Quality, Carrier Error",
+        "",
+        "SUPPORT & UX: Consultation Issue, Support Latency, Technical UX Issue, AI Complaint",
+        "",
+        "UNCATEGORIZED: Other — If nothing matches, or Semorelin/Zofran/NAD confusion, or pure financial processing instructions with amounts but NO patient complaint.",
+      ].join("\n");
+
+      const batchSteps = [
+        "You will classify MULTIPLE patient concerns in one response.",
+        "For EACH case, determine: reason, subReason, desiredAction, clientThreat, confidence.",
+        "",
+        "Quick classification rules:",
+        "- No cancellation/refund/pause mentioned → reason='Not for Retention', subReason='N/A', desiredAction='N/A'",
+        "- Pure financial instructions (dollar amounts, EPC, refund amounts only, no complaint) → reason='Uncategorized', subReason='Other'",
+        "- Switching provider WITHOUT mentioning cost → reason='Uncategorized', subReason='Other'",
+        "",
+        "desiredAction: exactly 'Cancel', 'Refund', 'Refund and Cancel', 'Paused', or 'N/A'",
+        "clientThreat: 'BBB Review', 'Dispute', 'Attorney General', 'Trust Pilot Review', or '' (empty)",
+        "confidence: 0-100 integer",
+        "",
+        "Output a JSON array with one object per case, in the SAME ORDER as the input cases.",
+        "Each object: {\"reason\": \"...\", \"subReason\": \"...\", \"desiredAction\": \"...\", \"clientThreat\": \"...\", \"confidence\": N}",
+        "",
+        "Output ONLY the JSON array on the last line. No markdown, no code fences.",
+      ].join("\n");
+
+      const systemContent = `${instructions}${examplesBlock}\n\n${subReasonDefs}\n\n${batchSteps}`;
+
+      const userContent = cases.map((c: any, i: number) => {
+        const concern = (c.concern || "").slice(0, 500);
+        return `CASE ${i + 1} (id: ${c.id || i}):\n${concern}`;
+      }).join("\n\n---\n\n");
+
+      const { client: aiClient, model: aiModel } = await getAIClient();
+
+      let completion: any = null;
+      const MAX_RETRIES = 4;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          completion = await aiClient.chat.completions.create({
+            model: aiModel,
+            messages: [
+              { role: "system", content: systemContent },
+              { role: "user", content: `Classify these ${cases.length} patient concerns:\n\n${userContent}` },
+            ],
+            max_completion_tokens: cases.length * 200,
+          });
+          break;
+        } catch (retryErr: any) {
+          if (retryErr?.status === 429 && attempt < MAX_RETRIES) {
+            const retryAfter = Number(retryErr?.headers?.get?.("retry-after-ms") || retryErr?.headers?.["retry-after-ms"]) || 0;
+            const waitMs = retryAfter > 0 ? retryAfter + 500 : (attempt + 1) * 5000;
+            console.log(`[GPT Batch] Rate limited, retrying in ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise(r => setTimeout(r, waitMs));
+            continue;
+          }
+          throw retryErr;
+        }
+      }
+      if (!completion) throw new Error("GPT batch analysis failed after retries");
+
+      const text = completion.choices[0]?.message?.content?.trim() || "";
+
+      let results: any[] = [];
+      try {
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        results = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+      } catch {
+        const objectMatches = text.match(/\{[^{}]*"reason"[^{}]*\}/g);
+        if (objectMatches) {
+          results = objectMatches.map((m: string) => { try { return JSON.parse(m); } catch { return null; } }).filter(Boolean);
+        }
+      }
+
+      while (results.length < cases.length) {
+        results.push({ reason: "", subReason: "", desiredAction: "", clientThreat: "", confidence: 0 });
+      }
+
+      const actionMap: Record<string, string> = {
+        "Cancel Only": "Cancel", "cancel only": "Cancel", "cancel": "Cancel",
+        "Refund Only": "Refund", "refund only": "Refund", "refund": "Refund",
+        "Refund and cancel": "Refund and Cancel", "refund and cancel": "Refund and Cancel",
+        "Cancel and Refund": "Refund and Cancel", "cancel and refund": "Refund and Cancel",
+        "Pause": "Paused", "pause": "Paused", "paused": "Paused",
+      };
+      const threatMap: Record<string, string> = {
+        "bbb": "BBB Review", "bbb review": "BBB Review", "dispute": "Dispute",
+        "attorney general": "Attorney General", "trust pilot": "Trust Pilot Review",
+        "trust pilot review": "Trust Pilot Review", "trustpilot": "Trust Pilot Review",
+        "trustpilot review": "Trust Pilot Review", "bad review": "Trust Pilot Review",
+        "negative review": "Trust Pilot Review",
+      };
+
+      const finalResults = results.slice(0, cases.length).map((r: any, i: number) => {
+        if (r.desiredAction) r.desiredAction = actionMap[r.desiredAction] || r.desiredAction;
+        if (typeof r.confidence !== "number") r.confidence = 0;
+        r.confidence = Math.max(0, Math.min(100, Math.round(r.confidence)));
+
+        const concern = (cases[i]?.concern || "").toLowerCase();
+        const detectedThreat = (() => {
+          if (/\bbbb\b|better\s*business\s*bureau/i.test(concern)) return "BBB Review";
+          if (/\bdispute\b|\bchargeback\b|charge\s*back|contact.*\bbank\b|reverse.*charge/i.test(concern)) return "Dispute";
+          if (/\battorney\s*general\b|\blegal\s*action\b|\blawyer\b|\bsue\b|\blawsuit\b/i.test(concern)) return "Attorney General";
+          if (/\btrustpilot\b|trust\s*pilot|\bbad\s*review\b|\bnegative\s*review\b|\bgoogle\s*review\b/i.test(concern)) return "Trust Pilot Review";
+          return "";
+        })();
+        r.clientThreat = detectedThreat || (r.clientThreat ? (threatMap[r.clientThreat.toLowerCase()] || r.clientThreat) : "");
+
+        return r;
+      });
+
+      res.json({ results: finalResults });
+    } catch (err: any) {
+      console.error("GPT batch analysis error:", err);
+      res.status(500).json({ message: err.message || "Failed to batch analyze" });
     }
   });
 

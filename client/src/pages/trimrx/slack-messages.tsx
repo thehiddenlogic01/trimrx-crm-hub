@@ -306,7 +306,8 @@ function extractCaseFromSlackMsg(text: string): ExtractedCase | null {
 }
 
 const BATCH_SIZE = 5;
-const PARALLEL_CONCURRENCY = 3;
+const BATCH_ANALYZE_SIZE = 10;
+const PARALLEL_CONCURRENCY = 2;
 
 function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage[]; dateFilter: string }) {
   const { toast } = useToast();
@@ -345,67 +346,94 @@ function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage
     const modeLabel = sendMode === "extract-only" ? " [Only Extract]" : sendMode === "without-reason" ? " [Without Reason]" : "";
     setLog([`Starting ${partLabel}${modeLabel} (${batch.length} cases)...`]);
 
-    async function processOneCase(c: ExtractedCase, idx: number) {
-      let reason = "";
-      let subReason = "";
-      let desiredAction = "";
-      let clientThreat = "";
-      let confidence = 0;
+    const needsAnalysis = sendMode !== "extract-only";
 
-      if (sendMode === "extract-only") {
-      } else if (c.concern) {
-        try {
-          const analyzeRes = await apiRequest("POST", "/api/custom-gpt/analyze", { concern: c.concern });
-          const analysis = await analyzeRes.json();
-          if (sendMode === "without-reason") {
-            reason = "";
-            subReason = analysis.subReason || "";
+    const analysisMap = new Map<number, { reason: string; subReason: string; desiredAction: string; clientThreat: string; confidence: number }>();
+
+    if (needsAnalysis) {
+      const casesWithConcerns = batch.map((c, i) => ({ idx: i, concern: c.concern || "" })).filter(c => c.concern.trim());
+
+      for (let batchStart = 0; batchStart < casesWithConcerns.length; batchStart += BATCH_ANALYZE_SIZE * PARALLEL_CONCURRENCY) {
+        const parallelBatches: typeof casesWithConcerns[] = [];
+        for (let p = 0; p < PARALLEL_CONCURRENCY; p++) {
+          const start = batchStart + p * BATCH_ANALYZE_SIZE;
+          const chunk = casesWithConcerns.slice(start, start + BATCH_ANALYZE_SIZE);
+          if (chunk.length > 0) parallelBatches.push(chunk);
+        }
+
+        const batchResults = await Promise.allSettled(
+          parallelBatches.map(async (chunk) => {
+            const analyzeRes = await apiRequest("POST", "/api/custom-gpt/analyze-batch", {
+              cases: chunk.map(c => ({ id: c.idx, concern: c.concern }))
+            });
+            const data = await analyzeRes.json();
+            return { chunk, results: data.results || [] };
+          })
+        );
+
+        for (const result of batchResults) {
+          if (result.status === "fulfilled") {
+            const { chunk, results } = result.value;
+            for (let j = 0; j < chunk.length; j++) {
+              const analysis = results[j] || {};
+              analysisMap.set(chunk[j].idx, {
+                reason: sendMode === "without-reason" ? "" : (analysis.reason || ""),
+                subReason: analysis.subReason || "",
+                desiredAction: analysis.desiredAction || "",
+                clientThreat: analysis.clientThreat || "",
+                confidence: analysis.confidence || 0,
+              });
+            }
+            setLog((prev) => [...prev, `🔍 Analyzed ${chunk.length} cases via batch GPT`]);
           } else {
-            reason = analysis.reason || "";
-            subReason = analysis.subReason || "";
+            const err = (result as PromiseRejectedResult).reason;
+            setLog((prev) => [...prev, `⚠ Batch GPT failed: ${err?.message || "Unknown"}, those cases will have no classification`]);
           }
-          desiredAction = analysis.desiredAction || "";
-          clientThreat = analysis.clientThreat || "";
-          confidence = analysis.confidence || 0;
-        } catch {
-          setLog((prev) => [...prev, `⚠ GPT analysis failed for ${c.caseId || "unknown"}, submitting without classification`]);
         }
       }
-
-      if (sendMode !== "extract-only" && sendMode !== "without-reason" && !reason) {
-        reason = "Uncategorized";
-        subReason = "Other";
-        desiredAction = "Cancel";
-        confidence = 0;
-      }
-
-      await apiRequest("POST", "/api/cv-reports", {
-        caseId: c.caseId || "",
-        link: c.link || "",
-        notesTrimrx: c.concern || "",
-        reason,
-        subReason,
-        desiredAction,
-        confidence,
-        status: "",
-        duplicated: "",
-        customerEmail: "",
-        date: dateFilter ? (() => { const d = new Date(dateFilter + "T12:00:00"); return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`; })() : "",
-        name: "",
-        productType: "",
-        clientThreat,
-        submittedBy: user?.username || "",
-        assignedTo: user?.username || "",
-      });
-      setSent((prev) => prev + 1);
-      const modeInfo = sendMode === "extract-only" ? " (extract only)" : sendMode === "without-reason" ? ` (${desiredAction || "no action"})` : ` (${reason || "?"})`;
-      setLog((prev) => [...prev, `✅ ${c.caseId || c.link.slice(-20) || `Case ${idx + 1}`} — sent${modeInfo}`]);
     }
 
     for (let chunkStart = 0; chunkStart < batch.length; chunkStart += PARALLEL_CONCURRENCY) {
       const chunk = batch.slice(chunkStart, chunkStart + PARALLEL_CONCURRENCY);
       const results = await Promise.allSettled(
-        chunk.map((c, j) => processOneCase(c, chunkStart + j))
+        chunk.map(async (c, j) => {
+          const idx = chunkStart + j;
+          const analysis = analysisMap.get(idx);
+          let reason = analysis?.reason || "";
+          let subReason = analysis?.subReason || "";
+          let desiredAction = analysis?.desiredAction || "";
+          let clientThreat = analysis?.clientThreat || "";
+          let confidence = analysis?.confidence || 0;
+
+          if (sendMode !== "extract-only" && sendMode !== "without-reason" && !reason) {
+            reason = "Uncategorized";
+            subReason = "Other";
+            desiredAction = "Cancel";
+            confidence = 0;
+          }
+
+          await apiRequest("POST", "/api/cv-reports", {
+            caseId: c.caseId || "",
+            link: c.link || "",
+            notesTrimrx: c.concern || "",
+            reason,
+            subReason,
+            desiredAction,
+            confidence,
+            status: "",
+            duplicated: "",
+            customerEmail: "",
+            date: dateFilter ? (() => { const d = new Date(dateFilter + "T12:00:00"); return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`; })() : "",
+            name: "",
+            productType: "",
+            clientThreat,
+            submittedBy: user?.username || "",
+            assignedTo: user?.username || "",
+          });
+          setSent((prev) => prev + 1);
+          const modeInfo = sendMode === "extract-only" ? " (extract only)" : sendMode === "without-reason" ? ` (${desiredAction || "no action"})` : ` (${reason || "?"})`;
+          setLog((prev) => [...prev, `✅ ${c.caseId || c.link.slice(-20) || `Case ${idx + 1}`} — sent${modeInfo}`]);
+        })
       );
       for (let j = 0; j < results.length; j++) {
         if (results[j].status === "rejected") {
