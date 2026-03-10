@@ -306,6 +306,7 @@ function extractCaseFromSlackMsg(text: string): ExtractedCase | null {
 }
 
 const BATCH_SIZE = 5;
+const PARALLEL_CONCURRENCY = 5;
 
 function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage[]; dateFilter: string }) {
   const { toast } = useToast();
@@ -344,71 +345,75 @@ function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage
     const modeLabel = sendMode === "extract-only" ? " [Only Extract]" : sendMode === "without-reason" ? " [Without Reason]" : "";
     setLog([`Starting ${partLabel}${modeLabel} (${batch.length} cases)...`]);
 
-    for (let i = 0; i < batch.length; i++) {
-      const c = batch[i];
-      try {
-        let reason = "";
-        let subReason = "";
-        let desiredAction = "";
-        let clientThreat = "";
-        let confidence = 0;
+    async function processOneCase(c: ExtractedCase, idx: number) {
+      let reason = "";
+      let subReason = "";
+      let desiredAction = "";
+      let clientThreat = "";
+      let confidence = 0;
 
-        if (sendMode === "extract-only") {
-          reason = "";
-          subReason = "";
-          desiredAction = "";
-          clientThreat = "";
-          confidence = 0;
-        } else if (c.concern) {
-          try {
-            const analyzeRes = await apiRequest("POST", "/api/custom-gpt/analyze", { concern: c.concern });
-            const analysis = await analyzeRes.json();
-            if (sendMode === "without-reason") {
-              reason = "";
-              subReason = analysis.subReason || "";
-            } else {
-              reason = analysis.reason || "";
-              subReason = analysis.subReason || "";
-            }
-            desiredAction = analysis.desiredAction || "";
-            clientThreat = analysis.clientThreat || "";
-            confidence = analysis.confidence || 0;
-          } catch {
-            setLog((prev) => [...prev, `⚠ GPT analysis failed for ${c.caseId || "unknown"}, submitting without classification`]);
+      if (sendMode === "extract-only") {
+      } else if (c.concern) {
+        try {
+          const analyzeRes = await apiRequest("POST", "/api/custom-gpt/analyze", { concern: c.concern });
+          const analysis = await analyzeRes.json();
+          if (sendMode === "without-reason") {
+            reason = "";
+            subReason = analysis.subReason || "";
+          } else {
+            reason = analysis.reason || "";
+            subReason = analysis.subReason || "";
           }
+          desiredAction = analysis.desiredAction || "";
+          clientThreat = analysis.clientThreat || "";
+          confidence = analysis.confidence || 0;
+        } catch {
+          setLog((prev) => [...prev, `⚠ GPT analysis failed for ${c.caseId || "unknown"}, submitting without classification`]);
         }
+      }
 
-        if (sendMode !== "extract-only" && sendMode !== "without-reason" && !reason) {
-          reason = "Uncategorized";
-          subReason = "Other";
-          desiredAction = "Cancel";
-          confidence = 0;
+      if (sendMode !== "extract-only" && sendMode !== "without-reason" && !reason) {
+        reason = "Uncategorized";
+        subReason = "Other";
+        desiredAction = "Cancel";
+        confidence = 0;
+      }
+
+      await apiRequest("POST", "/api/cv-reports", {
+        caseId: c.caseId || "",
+        link: c.link || "",
+        notesTrimrx: c.concern || "",
+        reason,
+        subReason,
+        desiredAction,
+        confidence,
+        status: "",
+        duplicated: "",
+        customerEmail: "",
+        date: dateFilter ? (() => { const d = new Date(dateFilter + "T12:00:00"); return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`; })() : "",
+        name: "",
+        productType: "",
+        clientThreat,
+        submittedBy: user?.username || "",
+        assignedTo: user?.username || "",
+      });
+      setSent((prev) => prev + 1);
+      const modeInfo = sendMode === "extract-only" ? " (extract only)" : sendMode === "without-reason" ? ` (${desiredAction || "no action"})` : ` (${reason || "?"})`;
+      setLog((prev) => [...prev, `✅ ${c.caseId || c.link.slice(-20) || `Case ${idx + 1}`} — sent${modeInfo}`]);
+    }
+
+    for (let chunkStart = 0; chunkStart < batch.length; chunkStart += PARALLEL_CONCURRENCY) {
+      const chunk = batch.slice(chunkStart, chunkStart + PARALLEL_CONCURRENCY);
+      const results = await Promise.allSettled(
+        chunk.map((c, j) => processOneCase(c, chunkStart + j))
+      );
+      for (let j = 0; j < results.length; j++) {
+        if (results[j].status === "rejected") {
+          const c = chunk[j];
+          const err = (results[j] as PromiseRejectedResult).reason;
+          setFailed((prev) => prev + 1);
+          setLog((prev) => [...prev, `❌ ${c.caseId || `Case ${chunkStart + j + 1}`} — failed: ${err?.message || "Unknown error"}`]);
         }
-
-        await apiRequest("POST", "/api/cv-reports", {
-          caseId: c.caseId || "",
-          link: c.link || "",
-          notesTrimrx: c.concern || "",
-          reason,
-          subReason,
-          desiredAction,
-          confidence,
-          status: "",
-          duplicated: "",
-          customerEmail: "",
-          date: dateFilter ? (() => { const d = new Date(dateFilter + "T12:00:00"); return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`; })() : "",
-          name: "",
-          productType: "",
-          clientThreat,
-          submittedBy: user?.username || "",
-          assignedTo: user?.username || "",
-        });
-        setSent((prev) => prev + 1);
-        const modeInfo = sendMode === "extract-only" ? " (extract only)" : sendMode === "without-reason" ? ` (${desiredAction || "no action"})` : ` (${reason || "?"})`;
-        setLog((prev) => [...prev, `✅ ${c.caseId || c.link.slice(-20) || `Case ${i + 1}`} — sent${modeInfo}`]);
-      } catch (err: any) {
-        setFailed((prev) => prev + 1);
-        setLog((prev) => [...prev, `❌ ${c.caseId || `Case ${i + 1}`} — failed: ${err.message}`]);
       }
     }
 
