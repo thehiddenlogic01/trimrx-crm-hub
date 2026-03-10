@@ -1527,6 +1527,22 @@ export default function SlackMessagesPage() {
           {can("slack-backlog-all", "send-to-cv") && filteredMessages.length > 0 && (
             <SendToCvReportDialog messages={filteredMessages} dateFilter={dateFilter} />
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="button-check-all-payments"
+          >
+            <CreditCard className="h-3.5 w-3.5 mr-1" />
+            Check all Payments
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="button-sync-data-cv"
+          >
+            <Database className="h-3.5 w-3.5 mr-1" />
+            Sync Data CV
+          </Button>
         </div>
       </div>
 
@@ -2215,85 +2231,65 @@ function MessageCard({
         </div>
 
         <div className="flex items-center gap-2 pt-1 border-t">
-          <div className="flex items-center gap-2 flex-1">
-            {can("slack-backlog-all", "mark-done") && (
-              !checked ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => reactMutation.mutate({ timestamp: msg.ts })}
-                  disabled={reactMutation.isPending}
-                  data-testid={`button-check-${msg.ts}`}
-                >
-                  <CheckSquare className="h-3.5 w-3.5 mr-1" />
-                  Mark Done
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => unreactMutation.mutate({ timestamp: msg.ts })}
-                  disabled={unreactMutation.isPending}
-                  className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                  data-testid={`button-uncheck-${msg.ts}`}
-                >
-                  <XCircle className="h-3.5 w-3.5 mr-1" />
-                  Remove ✅
-                </Button>
-              )
-            )}
-            {can("slack-backlog-all", "reply") && (
+          {can("slack-backlog-all", "mark-done") && (
+            !checked ? (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setReplyingTo(isReplying ? null : msg.ts)}
-                data-testid={`button-reply-${msg.ts}`}
+                onClick={() => reactMutation.mutate({ timestamp: msg.ts })}
+                disabled={reactMutation.isPending}
+                data-testid={`button-check-${msg.ts}`}
               >
-                <Send className="h-3.5 w-3.5 mr-1" />
-                Reply
+                <CheckSquare className="h-3.5 w-3.5 mr-1" />
+                Mark Done
               </Button>
-            )}
-            <PaymentIntentsButton msg={msg} />
-            {msg.reply_count > 0 && (
+            ) : (
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={() => setExpandedThread(isExpanded ? null : msg.ts)}
-                data-testid={`button-thread-${msg.ts}`}
+                onClick={() => unreactMutation.mutate({ timestamp: msg.ts })}
+                disabled={unreactMutation.isPending}
+                className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                data-testid={`button-uncheck-${msg.ts}`}
               >
-                <MessageCircle className="h-3.5 w-3.5 mr-1" />
-                {msg.reply_count} {msg.reply_count === 1 ? "reply" : "replies"}
-                {isExpanded ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
+                <XCircle className="h-3.5 w-3.5 mr-1" />
+                Remove ✅
               </Button>
-            )}
-            <a
-              href={slackLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
-              data-testid={`link-slack-${msg.ts}`}
-            >
-              Open in Slack <ExternalLink className="h-3 w-3" />
-            </a>
-          </div>
-          <div className="flex items-center gap-2 border-l pl-2">
+            )
+          )}
+          {can("slack-backlog-all", "reply") && (
             <Button
               variant="outline"
               size="sm"
-              data-testid={`button-check-payments-${msg.ts}`}
+              onClick={() => setReplyingTo(isReplying ? null : msg.ts)}
+              data-testid={`button-reply-${msg.ts}`}
             >
-              <CreditCard className="h-3.5 w-3.5 mr-1" />
-              Check all Payments
+              <Send className="h-3.5 w-3.5 mr-1" />
+              Reply
             </Button>
+          )}
+          <PaymentIntentsButton msg={msg} />
+          {msg.reply_count > 0 && (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              data-testid={`button-sync-cv-${msg.ts}`}
+              onClick={() => setExpandedThread(isExpanded ? null : msg.ts)}
+              data-testid={`button-thread-${msg.ts}`}
             >
-              <Database className="h-3.5 w-3.5 mr-1" />
-              Sync Data CV
+              <MessageCircle className="h-3.5 w-3.5 mr-1" />
+              {msg.reply_count} {msg.reply_count === 1 ? "reply" : "replies"}
+              {isExpanded ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
             </Button>
-          </div>
+          )}
+          <a
+            href={slackLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto text-xs text-muted-foreground hover:text-primary inline-flex items-center gap-1"
+            data-testid={`link-slack-${msg.ts}`}
+          >
+            Open in Slack <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
 
         {isReplying && (
