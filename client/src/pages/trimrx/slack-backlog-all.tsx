@@ -702,17 +702,75 @@ export default function SlackMessagesPage() {
   const [replyFilters, setReplyFilters] = useState<string[]>([]);
   const [replyFilterLoading, setReplyFilterLoading] = useState(false);
   const [replyFilterMatchedMap, setReplyFilterMatchedMap] = useState<Record<string, Record<string, { matchedBy: string }>>>({});
-  const [trackerMatchMap, setTrackerMatchMap] = useState<Record<string, Record<string, string> | null>>({});
+  const loadFromSession = <T,>(key: string, fallback: T): T => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return fallback;
+      return JSON.parse(raw) as T;
+    } catch { return fallback; }
+  };
+  const saveToSession = (key: string, val: any) => {
+    try { sessionStorage.setItem(key, JSON.stringify(val)); } catch {}
+  };
+
+  const [trackerMatchMap, _setTrackerMatchMap] = useState<Record<string, Record<string, string> | null>>(() => loadFromSession("sba_trackerMatchMap", {}));
+  const setTrackerMatchMap: typeof _setTrackerMatchMap = (v) => {
+    _setTrackerMatchMap((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      saveToSession("sba_trackerMatchMap", next);
+      return next;
+    });
+  };
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
   const [trackerFilter, setTrackerFilter] = useState("all");
-  const [paymentsMap, setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>({});
+  const [paymentsMap, _setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>(() => loadFromSession("sba_paymentsMap", {}));
+  const setPaymentsMap: typeof _setPaymentsMap = (v) => {
+    _setPaymentsMap((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      saveToSession("sba_paymentsMap", next);
+      return next;
+    });
+  };
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [paymentsProgress, setPaymentsProgress] = useState({ done: 0, total: 0 });
-  const [cvDataMap, setCvDataMap] = useState<Record<string, { name?: string; email?: string; status?: string; found?: boolean; error?: string }>>({});
+  const [cvDataMap, _setCvDataMap] = useState<Record<string, { name?: string; email?: string; status?: string; found?: boolean; error?: string }>>(() => loadFromSession("sba_cvDataMap", {}));
+  const setCvDataMap: typeof _setCvDataMap = (v) => {
+    _setCvDataMap((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      saveToSession("sba_cvDataMap", next);
+      return next;
+    });
+  };
   const [cvSyncLoading, setCvSyncLoading] = useState(false);
   const [cvSyncProgress, setCvSyncProgress] = useState({ done: 0, total: 0 });
-  const [lastPulledTime, setLastPulledTime] = useState<Date | null>(null);
-  const [lastPulledPerMsg, setLastPulledPerMsg] = useState<Record<string, Date>>({});
+  const [lastPulledTime, _setLastPulledTime] = useState<Date | null>(() => {
+    const raw = sessionStorage.getItem("sba_lastPulledTime");
+    return raw ? new Date(raw) : null;
+  });
+  const setLastPulledTime = (d: Date | null) => {
+    _setLastPulledTime(d);
+    if (d) sessionStorage.setItem("sba_lastPulledTime", d.toISOString());
+    else sessionStorage.removeItem("sba_lastPulledTime");
+  };
+  const [lastPulledPerMsg, _setLastPulledPerMsg] = useState<Record<string, Date>>(() => {
+    try {
+      const raw = sessionStorage.getItem("sba_lastPulledPerMsg");
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      const result: Record<string, Date> = {};
+      for (const [k, v] of Object.entries(parsed)) result[k] = new Date(v as string);
+      return result;
+    } catch { return {}; }
+  });
+  const setLastPulledPerMsg: typeof _setLastPulledPerMsg = (v) => {
+    _setLastPulledPerMsg((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      const serializable: Record<string, string> = {};
+      for (const [k, d] of Object.entries(next)) serializable[k] = d.toISOString();
+      saveToSession("sba_lastPulledPerMsg", serializable);
+      return next;
+    });
+  };
 
   const { data: slackStatus } = useQuery<{ connected: boolean; team?: string }>({
     queryKey: ["/api/slack/status"],
