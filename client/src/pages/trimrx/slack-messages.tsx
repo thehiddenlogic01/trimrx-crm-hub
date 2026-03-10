@@ -306,7 +306,7 @@ function extractCaseFromSlackMsg(text: string): ExtractedCase | null {
 }
 
 const BATCH_SIZE = 5;
-const PARALLEL_CONCURRENCY = 5;
+const PARALLEL_CONCURRENCY = 3;
 
 function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage[]; dateFilter: string }) {
   const { toast } = useToast();

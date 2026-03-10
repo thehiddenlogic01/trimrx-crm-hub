@@ -218,18 +218,19 @@ export function setupCvReportRoutes(app: Express) {
         });
         scored.sort((a: any, b: any) => b.score - a.score);
 
-        const topExamples = scored.slice(0, 30);
+        const topExamples = scored.slice(0, 15);
 
         const reasonCounts: Record<string, number> = {};
         topExamples.forEach((ex: any) => { reasonCounts[ex.reason] = (reasonCounts[ex.reason] || 0) + 1; });
         const underrepresented = allExamples.filter((ex: any) => !topExamples.some((t: any) => t.concern === ex.concern) && (reasonCounts[ex.reason] || 0) < 3);
-        const extras = underrepresented.slice(0, 10);
+        const extras = underrepresented.slice(0, 5);
         const finalExamples = [...topExamples, ...extras];
 
         examplesBlock = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nREFERENCE EXAMPLES — Use these as ground truth for classification. If a new case is similar to one of these examples, classify it the same way.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n";
-        examplesBlock += finalExamples.map((ex: any, i: number) =>
-          `Example ${i + 1}:\nConcern: "${ex.concern}"\n→ Reason: ${ex.reason}\n→ Sub-Reason: ${ex.subReason}\n→ Desired Action: ${ex.desiredAction}`
-        ).join("\n\n");
+        examplesBlock += finalExamples.map((ex: any, i: number) => {
+          const truncatedConcern = (ex.concern || "").length > 200 ? (ex.concern as string).slice(0, 200) + "..." : (ex.concern || "");
+          return `Example ${i + 1}:\nConcern: "${truncatedConcern}"\n→ Reason: ${ex.reason}\n→ Sub-Reason: ${ex.subReason}\n→ Desired Action: ${ex.desiredAction}`;
+        }).join("\n\n");
       }
 
       const coreExamples = [
@@ -337,20 +338,38 @@ export function setupCvReportRoutes(app: Express) {
       const systemContent = `${instructions}${examplesBlock}\n\n${subReasonDefs}\n\n${analysisSteps}`;
 
       const { client: aiClient, model: aiModel } = await getAIClient();
-      const completion = await aiClient.chat.completions.create({
-        model: aiModel,
-        messages: [
-          {
-            role: "system",
-            content: systemContent,
-          },
-          {
-            role: "user",
-            content: `Analyze this patient concern and classify it:\n\n${concern}`,
-          },
-        ],
-        max_completion_tokens: 2000,
-      });
+
+      let completion: any = null;
+      const MAX_RETRIES = 4;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          completion = await aiClient.chat.completions.create({
+            model: aiModel,
+            messages: [
+              {
+                role: "system",
+                content: systemContent,
+              },
+              {
+                role: "user",
+                content: `Analyze this patient concern and classify it:\n\n${concern}`,
+              },
+            ],
+            max_completion_tokens: 2000,
+          });
+          break;
+        } catch (retryErr: any) {
+          if (retryErr?.status === 429 && attempt < MAX_RETRIES) {
+            const retryAfter = Number(retryErr?.headers?.get?.("retry-after-ms") || retryErr?.headers?.["retry-after-ms"]) || 0;
+            const waitMs = retryAfter > 0 ? retryAfter + 500 : (attempt + 1) * 5000;
+            console.log(`[GPT] Rate limited, retrying in ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise(r => setTimeout(r, waitMs));
+            continue;
+          }
+          throw retryErr;
+        }
+      }
+      if (!completion) throw new Error("GPT analysis failed after retries");
 
       const text = completion.choices[0]?.message?.content?.trim() || "";
       let result;
