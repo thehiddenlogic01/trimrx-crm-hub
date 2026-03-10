@@ -2265,6 +2265,23 @@ function MessageCard({
               <span data-testid={`payments-info-${msg.ts}`}>—</span>
             </div>
           </div>
+          <div className="border-t pt-2" data-testid={`panel-tracker-${msg.ts}`}>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Tracker</h4>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Agent Assigned</span>
+                <span className="font-medium text-foreground" data-testid={`tracker-agent-${msg.ts}`}>—</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Outcome</span>
+                <span className="font-medium text-foreground" data-testid={`tracker-outcome-${msg.ts}`}>—</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground whitespace-nowrap">TrimRx Agent Notes</span>
+                <span className="font-medium text-foreground text-right" data-testid={`tracker-notes-${msg.ts}`}>—</span>
+              </div>
+            </div>
+          </div>
         </div>
         </div>
 
