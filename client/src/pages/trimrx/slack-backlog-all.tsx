@@ -39,6 +39,7 @@ import {
   XOctagon,
   CreditCard,
   DollarSign,
+  ClipboardList,
 } from "lucide-react";
 
 const CHANNEL_ID = "C09KBS41YHH";
@@ -1906,12 +1907,14 @@ function ReplyWithTemplates({
   replyText,
   setReplyText,
   replyMutation,
+  agentNotes,
 }: {
   msgTs: string;
   threadTs: string;
   replyText: Record<string, string>;
   setReplyText: (fn: (prev: Record<string, string>) => Record<string, string>) => void;
   replyMutation: any;
+  agentNotes?: string;
 }) {
   const { data: templates } = useQuery<ReplyTemplate[]>({
     queryKey: ["/api/slack/reply-templates"],
@@ -1923,9 +1926,25 @@ function ReplyWithTemplates({
 
   return (
     <div className="space-y-1.5 pt-1">
-      {templates && templates.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap" data-testid={`templates-bar-${msgTs}`}>
-          {templates.map((t) => (
+      <div className="flex gap-1.5 flex-wrap" data-testid={`templates-bar-${msgTs}`}>
+        {agentNotes && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setReplyText((prev) => ({ ...prev, [msgTs]: agentNotes }))}
+                data-testid={`button-reply-agent-notes-${msgTs}`}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-300 hover:bg-yellow-200 hover:border-yellow-400 transition-all cursor-pointer dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-700 dark:hover:bg-yellow-900/50"
+              >
+                <ClipboardList className="h-3 w-3" />
+                Reply Agent Notes
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              {agentNotes.length > 150 ? agentNotes.slice(0, 150) + "..." : agentNotes}
+            </TooltipContent>
+          </Tooltip>
+        )}
+        {templates && templates.length > 0 && templates.map((t) => (
             <Tooltip key={t.id}>
               <TooltipTrigger asChild>
                 <button
@@ -1942,8 +1961,7 @@ function ReplyWithTemplates({
               </TooltipContent>
             </Tooltip>
           ))}
-        </div>
-      )}
+      </div>
       <div className="flex gap-2">
         <Textarea
           placeholder="Type your reply..."
@@ -2700,6 +2718,7 @@ function MessageCard({
             replyText={replyText}
             setReplyText={setReplyText}
             replyMutation={replyMutation}
+            agentNotes={trackerMatch ? getTrackerField(trackerMatch, "TrimRx Agent Notes", "trimrx_agent_notes") : undefined}
           />
         )}
 
