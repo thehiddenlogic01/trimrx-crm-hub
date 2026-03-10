@@ -218,7 +218,7 @@ function ClientThreatSection() {
 const SIDEBAR_SECTIONS: { label: string; routes: string[] }[] = [
   {
     label: "TrimRX CV",
-    routes: ["/trimrx/cv-support", "/trimrx/cv-report", "/trimrx/retention-final-submit", "/trimrx/slack-messages", "/trimrx/rt-help", "/trimrx/cv-slack", "/trimrx/cv-settings"],
+    routes: ["/trimrx/cv-support", "/trimrx/cv-report", "/trimrx/retention-final-submit", "/trimrx/slack-messages", "/trimrx/slack-backlog-all", "/trimrx/rt-help", "/trimrx/cv-slack", "/trimrx/cv-settings"],
   },
   {
     label: "TrimRX Disputes",

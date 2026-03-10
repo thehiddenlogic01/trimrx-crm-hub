@@ -26,6 +26,7 @@ export const APP_PAGES: Record<string, string> = {
   "/admin/settings": "Admin Settings",
   "/database/pt-finder": "PT Finder",
   "/database/stripe-payments": "Stripe Payment Details",
+  "/trimrx/slack-backlog-all": "Slack Backlog All",
   "/communication/internal-bd": "Trimrx Internal (BD)",
 };
 
@@ -38,7 +39,7 @@ export const APP_SECTIONS = [
   {
     key: "trimrx-cv",
     label: "TrimRX CV",
-    routes: ["/trimrx/cv-support", "/trimrx/cv-report", "/trimrx/retention-final-submit", "/trimrx/slack-messages", "/trimrx/rt-help", "/trimrx/cv-slack", "/trimrx/cv-settings"],
+    routes: ["/trimrx/cv-support", "/trimrx/cv-report", "/trimrx/retention-final-submit", "/trimrx/slack-messages", "/trimrx/slack-backlog-all", "/trimrx/rt-help", "/trimrx/cv-slack", "/trimrx/cv-settings"],
   },
   {
     key: "trimrx-disputes",
@@ -99,6 +100,21 @@ export const APP_FEATURES: PageFeatures[] = [
     label: "Manage Slack Case",
     section: "trimrx-cv",
     route: "/trimrx/slack-messages",
+    features: [
+      { key: "reply", label: "Reply to Messages" },
+      { key: "mark-done", label: "Mark as Done" },
+      { key: "send-to-cv", label: "Send to CV Report" },
+      { key: "delete-message", label: "Delete Messages" },
+      { key: "check-cv-status", label: "Check CV Status" },
+      { key: "bulk-done", label: "Bulk Mark Done" },
+      { key: "reply-filter", label: "Reply Filter (All Replies dropdown)" },
+    ],
+  },
+  {
+    page: "slack-backlog-all",
+    label: "Slack Backlog All",
+    section: "trimrx-cv",
+    route: "/trimrx/slack-backlog-all",
     features: [
       { key: "reply", label: "Reply to Messages" },
       { key: "mark-done", label: "Mark as Done" },

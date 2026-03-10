@@ -68,6 +68,7 @@ const CvSettingsPage = lazy(() => import("@/pages/trimrx/cv-settings"));
 const DisputesDocPage = lazy(() => import("@/pages/trimrx/disputes-doc"));
 const PatientsAnalysisPage = lazy(() => import("@/pages/trimrx/patients-analysis"));
 const SlackMessagesPage = lazy(() => import("@/pages/trimrx/slack-messages"));
+const SlackBacklogAllPage = lazy(() => import("@/pages/trimrx/slack-backlog-all"));
 const CvSlackPage = lazy(() => import("@/pages/trimrx/cv-slack"));
 const RtHelpPage = lazy(() => import("@/pages/trimrx/rt-help"));
 const GptChatPage = lazy(() => import("@/pages/gpt-chat"));
@@ -203,6 +204,9 @@ function AppLayout() {
                   </Route>
                   <Route path="/trimrx/slack-messages">
                     {() => <ProtectedRoute component={SlackMessagesPage} path="/trimrx/slack-messages" />}
+                  </Route>
+                  <Route path="/trimrx/slack-backlog-all">
+                    {() => <ProtectedRoute component={SlackBacklogAllPage} path="/trimrx/slack-backlog-all" />}
                   </Route>
                   <Route path="/trimrx/rt-help">
                     {() => <ProtectedRoute component={RtHelpPage} path="/trimrx/rt-help" />}

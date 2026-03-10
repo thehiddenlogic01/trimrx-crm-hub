@@ -49,6 +49,7 @@ const trimrxMenu = [
   { title: "CV Report", url: "/trimrx/cv-report", icon: FileSpreadsheet },
   { title: "Retention Final Submit", url: "/trimrx/retention-final-submit", icon: SendHorizonal },
   { title: "Manage Slack Case", url: "/trimrx/slack-messages", icon: MessagesSquare },
+  { title: "Slack Backlog All", url: "/trimrx/slack-backlog-all", icon: MessagesSquare },
   { title: "RT Help", url: "/trimrx/rt-help", icon: Headphones },
   { title: "CV Slack", url: "/trimrx/cv-slack", icon: Hash },
   { title: "CV Settings", url: "/trimrx/cv-settings", icon: Settings },
