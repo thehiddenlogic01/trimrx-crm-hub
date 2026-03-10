@@ -1670,9 +1670,20 @@ export default function SlackMessagesPage() {
             variant="outline"
             size="sm"
             data-testid="button-tracker-data-sync"
+            onClick={matchTrackerData}
+            disabled={trackerMatchLoading}
           >
-            <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
-            Tracker Data Sync
+            {trackerMatchLoading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+                Tracker Data Sync
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -2431,17 +2442,17 @@ function MessageCard({
           <div className="border-t pt-2" data-testid={`panel-tracker-${msg.ts}`}>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Tracker</h4>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-1">
                 <span className="text-muted-foreground">Agent Assigned</span>
-                <span className="font-medium text-foreground" data-testid={`tracker-agent-${msg.ts}`}>—</span>
+                <span className="font-medium text-foreground truncate max-w-[160px]" title={trackerMatch ? (trackerMatch["Agent Assigned"] || trackerMatch["agent_assigned"] || "") : ""} data-testid={`tracker-agent-${msg.ts}`}>{trackerMatch ? (trackerMatch["Agent Assigned"] || trackerMatch["agent_assigned"] || "—") : "—"}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-1">
                 <span className="text-muted-foreground">Outcome</span>
-                <span className="font-medium text-foreground" data-testid={`tracker-outcome-${msg.ts}`}>—</span>
+                <span className="font-medium text-foreground truncate max-w-[160px]" title={trackerMatch ? (trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"] || "") : ""} data-testid={`tracker-outcome-${msg.ts}`}>{trackerMatch ? (trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"] || "—") : "—"}</span>
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground whitespace-nowrap">TrimRx Agent Notes</span>
-                <span className="font-medium text-foreground text-right" data-testid={`tracker-notes-${msg.ts}`}>—</span>
+                <span className="font-medium text-foreground text-right truncate max-w-[140px]" title={trackerMatch ? (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"] || "") : ""} data-testid={`tracker-notes-${msg.ts}`}>{trackerMatch ? (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"] || "—") : "—"}</span>
               </div>
             </div>
           </div>
