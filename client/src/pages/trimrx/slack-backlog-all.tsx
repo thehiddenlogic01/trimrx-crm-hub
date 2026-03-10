@@ -2038,6 +2038,8 @@ function MessageCard({
   return (
     <Card className={`border-l-4 ${checked ? "border-l-green-400 border-green-300 bg-green-50/30 dark:border-l-green-600 dark:border-green-800 dark:bg-green-950/20" : "border-l-blue-400 dark:border-l-blue-600"} ${isSelected ? "border-primary ring-1 ring-primary/30" : ""}`} data-testid={`msg-${msg.ts}`}>
       <CardContent className="p-4 space-y-3">
+        <div className="flex gap-4">
+        <div className="flex-1 min-w-0 space-y-3">
         {isReply && (
           <div className="flex items-start gap-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-md px-3 py-2 text-xs" data-testid={`reply-indicator-${msg.ts}`}>
             <CornerDownRight className="h-3.5 w-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
@@ -2228,6 +2230,34 @@ function MessageCard({
               </div>
             )}
           </div>
+        </div>
+        </div>
+
+        <div className="w-[280px] flex-shrink-0 border-l pl-3 space-y-3">
+          <div data-testid={`panel-cv-${msg.ts}`}>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">CV</h4>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Name</span>
+                <span className="font-medium text-foreground" data-testid={`cv-name-${msg.ts}`}>—</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Email</span>
+                <span className="font-medium text-foreground" data-testid={`cv-email-${msg.ts}`}>—</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <span className="font-medium text-foreground" data-testid={`cv-status-${msg.ts}`}>—</span>
+              </div>
+            </div>
+          </div>
+          <div className="border-t pt-2" data-testid={`panel-payments-${msg.ts}`}>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Payments</h4>
+            <div className="text-xs text-muted-foreground">
+              <span data-testid={`payments-info-${msg.ts}`}>—</span>
+            </div>
+          </div>
+        </div>
         </div>
 
         <div className="flex items-center gap-2 pt-1 border-t">
