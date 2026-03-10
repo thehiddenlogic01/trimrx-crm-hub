@@ -767,10 +767,6 @@ export default function SlackMessagesPage() {
   }, [searchQuery]);
 
   useEffect(() => {
-    if (Object.keys(trackerMatchMap).length > 0) {
-      setTrackerMatchMap({});
-      setTrackerFilter("all");
-    }
     if (replyFilters.length > 0) {
       setReplyFilters([]);
       setReplyFilterMatchedMap({});
@@ -1177,7 +1173,7 @@ export default function SlackMessagesPage() {
       for (const lq of linkQueries) {
         resultMap[lq.msgTs] = data.results?.[lq.query] || null;
       }
-      setTrackerMatchMap(resultMap);
+      setTrackerMatchMap((prev) => ({ ...prev, ...resultMap }));
       const now = new Date();
       setLastPulledTime(now);
       setLastPulledPerMsg((prev) => {
@@ -1323,7 +1319,7 @@ export default function SlackMessagesPage() {
       }
       setPaymentsProgress((prev) => ({ ...prev, done: Math.min(prev.done + batch.length, msgsToCheck.length) }));
     }
-    setPaymentsMap(newMap);
+    setPaymentsMap((prev) => ({ ...prev, ...newMap }));
     setPaymentsLoading(false);
     const now2 = new Date();
     setLastPulledTime(now2);
@@ -1380,7 +1376,7 @@ export default function SlackMessagesPage() {
         break;
       }
     }
-    setCvDataMap(newMap);
+    setCvDataMap((prev) => ({ ...prev, ...newMap }));
     setCvSyncLoading(false);
     const now3 = new Date();
     setLastPulledTime(now3);
