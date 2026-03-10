@@ -2619,10 +2619,10 @@ function MessageCard({
               </div>
               <div className="flex justify-between gap-2 relative group/notes">
                 <span className="text-muted-foreground whitespace-nowrap">TrimRx Agent Notes</span>
-                <span className="font-medium text-foreground text-right truncate max-w-[140px] cursor-default" data-testid={`tracker-notes-${msg.ts}`}>{trackerMatch ? (getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes", "Notes") || "—") : "—"}</span>
-                {trackerMatch && getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes", "Notes") && (
+                <span className="font-medium text-foreground text-right truncate max-w-[140px] cursor-default" data-testid={`tracker-notes-${msg.ts}`}>{trackerMatch ? (getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes") || "—") : "—"}</span>
+                {trackerMatch && getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes") && (
                   <div className="hidden group-hover/notes:block absolute right-0 top-full mt-1 z-50 w-[300px] p-3 rounded-lg shadow-lg bg-yellow-50 dark:bg-yellow-950/40 border border-yellow-200 dark:border-yellow-800 text-sm text-foreground whitespace-pre-wrap break-words">
-                    {getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes", "Notes")}
+                    {getTrackerField(trackerMatch, "Notes TrimRX", "TrimRx Agent Notes", "trimrx_agent_notes")}
                   </div>
                 )}
               </div>
