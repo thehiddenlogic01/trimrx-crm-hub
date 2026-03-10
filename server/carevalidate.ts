@@ -43,7 +43,7 @@ const CASE_TREATMENTS_QUERY = `query CaseTreatmentsQuery($caseId: String!) {
 }`;
 
 
-function buildDetailedStatus(caseData: any): string {
+function buildDetailedStatus(caseData: any, treatments?: any[]): string {
   const status = caseData.status || "";
   const isArchived = caseData.isArchived || false;
   const archiveReason = caseData.archiveReason || "";
@@ -62,10 +62,20 @@ function buildDetailedStatus(caseData: any): string {
     }
     return base;
   }
-  
+
+  if (status === "IN_PROGRESS" && Array.isArray(treatments) && treatments.length > 0) {
+    const treatmentStatuses = treatments.map((t: any) => (t.status || "").toUpperCase());
+    if (treatmentStatuses.some((s: string) => s === "PRESCRIBED" || s === "COMPLETED" || s === "SHIPPED")) {
+      return "Prescription";
+    }
+    if (treatmentStatuses.some((s: string) => s === "IN_PROGRESS" || s === "PENDING_REVIEW" || s === "PENDING")) {
+      return "Virtual Consult";
+    }
+  }
+
   const statusMap: Record<string, string> = {
     "APPROVED": "Approved",
-    "IN_PROGRESS": "In Progress",
+    "IN_PROGRESS": "Virtual Consult",
     "SUBMITTED": "Submitted",
     "CLOSED": "Closed",
     "DENIED": "Denied",
@@ -178,7 +188,7 @@ async function fetchCaseData(caseUUID: string, token: string) {
   const caseData = json.data?.caseById || null;
   if (caseData) {
     const { submitter, ...rest } = caseData;
-    console.log(`[carevalidate] Case ${caseData.shortId}:`, JSON.stringify(rest));
+    console.log(`[carevalidate] Case ${caseData.shortId}: status=${caseData.status}, steps=${JSON.stringify(caseData.steps || [])}`);
 
     if (!caseData.productBundle?.name) {
       console.log(`[carevalidate] productBundle null for ${caseData.shortId}, trying caseTreatments...`);
@@ -385,10 +395,21 @@ export function setupCareValidateRoutes(app: Express) {
       const caseData = await fetchCaseData(caseUUID, token);
       if (!caseData) return res.json({ found: false, message: "Case not found" });
 
+      let treatments: any[] | undefined;
+      try {
+        const tRes = await fetch(CAREVALIDATE_GRAPHQL_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+          body: JSON.stringify({ operationName: "CaseTreatmentsQuery", query: CASE_TREATMENTS_QUERY, variables: { caseId: caseUUID } }),
+        });
+        const tJson = await tRes.json();
+        treatments = tJson.data?.caseTreatments || undefined;
+      } catch {}
+
       const submitter = caseData.submitter;
       const name = submitter?.fullName || [submitter?.firstName, submitter?.lastName].filter(Boolean).join(" ") || "";
       const email = submitter?.email || "";
-      const status = buildDetailedStatus(caseData);
+      const status = buildDetailedStatus(caseData, treatments);
 
       res.json({ found: true, name, email, status, caseId: caseData.shortId || "" });
     } catch (err: any) {
