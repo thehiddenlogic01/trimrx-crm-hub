@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
+import checkColorfulImg from "@assets/image_1773174563337.png";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -76,10 +77,11 @@ function formatTs(ts: string) {
 }
 
 function hasCheckmark(reactions: { name: string }[]) {
-  return reactions.some((r) => r.name === "white_check_mark");
+  return reactions.some((r) => r.name === "check_colorful");
 }
 
 const SLACK_EMOJI: Record<string, string> = {
+  check_colorful: "✔️",
   white_check_mark: "\u2705",
   eyes: "\uD83D\uDC40",
   thumbsup: "\uD83D\uDC4D",
@@ -133,8 +135,19 @@ const SLACK_EMOJI: Record<string, string> = {
   unlock: "\uD83D\uDD13",
 };
 
+const CUSTOM_EMOJI_IMAGES: Record<string, string> = {
+  check_colorful: checkColorfulImg,
+};
+
 function emojiFromName(name: string): string {
   return SLACK_EMOJI[name] || `:${name}:`;
+}
+
+function EmojiDisplay({ name, className }: { name: string; className?: string }) {
+  if (CUSTOM_EMOJI_IMAGES[name]) {
+    return <img src={CUSTOM_EMOJI_IMAGES[name]} alt={`:${name}:`} className={className || "w-4 h-4 inline-block"} />;
+  }
+  return <span className={className || "text-sm"}>{emojiFromName(name)}</span>;
 }
 
 function escapeHtml(str: string) {
@@ -179,6 +192,11 @@ function formatSlackText(text: string, users?: Record<string, SlackUser>) {
       return ph;
     })
     .replace(/:([a-z0-9_+-]+):/g, (_m, name) => {
+      if (CUSTOM_EMOJI_IMAGES[name]) {
+        const ph = `__LINK${i++}__`;
+        links.push({ placeholder: ph, html: `<img src="${CUSTOM_EMOJI_IMAGES[name]}" alt=":${name}:" class="w-5 h-5 inline-block align-text-bottom" />` });
+        return ph;
+      }
       const emoji = SLACK_EMOJI[name];
       if (emoji) return emoji;
       return `:${name}:`;
@@ -815,7 +833,7 @@ export default function SlackMessagesPage() {
 
   const reactMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, name: "white_check_mark" });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, name: "check_colorful" });
     },
     onMutate: ({ timestamp }) => {
       const snapshot = snapshotChannelCache();
@@ -823,11 +841,11 @@ export default function SlackMessagesPage() {
         if (!old) return old;
         return old.map((msg) => {
           if (msg.ts !== timestamp) return msg;
-          const existing = msg.reactions.find((r) => r.name === "white_check_mark");
+          const existing = msg.reactions.find((r) => r.name === "check_colorful");
           if (existing) {
-            return { ...msg, reactions: msg.reactions.map((r) => r.name === "white_check_mark" ? { ...r, count: r.count + 1, users: [...r.users, "me"] } : r) };
+            return { ...msg, reactions: msg.reactions.map((r) => r.name === "check_colorful" ? { ...r, count: r.count + 1, users: [...r.users, "me"] } : r) };
           }
-          return { ...msg, reactions: [...msg.reactions, { name: "white_check_mark", count: 1, users: ["me"] }] };
+          return { ...msg, reactions: [...msg.reactions, { name: "check_colorful", count: 1, users: ["me"] }] };
         });
       };
       queryClient.setQueriesData<SlackMessage[]>({ queryKey: ["/api/slack/channels", CHANNEL_ID] }, updateMessages);
@@ -845,7 +863,7 @@ export default function SlackMessagesPage() {
 
   const unreactMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, name: "white_check_mark" });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, name: "check_colorful" });
     },
     onMutate: ({ timestamp }) => {
       const snapshot = snapshotChannelCache();
@@ -853,12 +871,12 @@ export default function SlackMessagesPage() {
         if (!old) return old;
         return old.map((msg) => {
           if (msg.ts !== timestamp) return msg;
-          const existing = msg.reactions.find((r) => r.name === "white_check_mark");
+          const existing = msg.reactions.find((r) => r.name === "check_colorful");
           if (existing && existing.count <= 1) {
-            return { ...msg, reactions: msg.reactions.filter((r) => r.name !== "white_check_mark") };
+            return { ...msg, reactions: msg.reactions.filter((r) => r.name !== "check_colorful") };
           }
           if (existing) {
-            return { ...msg, reactions: msg.reactions.map((r) => r.name === "white_check_mark" ? { ...r, count: r.count - 1, users: r.users.filter((u) => u !== "me") } : r) };
+            return { ...msg, reactions: msg.reactions.map((r) => r.name === "check_colorful" ? { ...r, count: r.count - 1, users: r.users.filter((u) => u !== "me") } : r) };
           }
           return msg;
         });
@@ -989,11 +1007,11 @@ export default function SlackMessagesPage() {
           thread_ts: threadTs,
           text: cvInfo.status,
         });
-        const hasCheck = msg.reactions.some((r) => r.name === "white_check_mark");
+        const hasCheck = msg.reactions.some((r) => r.name === "check_colorful");
         if (!hasCheck) {
           await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, {
             timestamp: msg.ts,
-            name: "white_check_mark",
+            name: "check_colorful",
           });
         }
         successCount++;
@@ -1044,7 +1062,7 @@ export default function SlackMessagesPage() {
       }
     }
     if (statusFilter !== "all") {
-      const hasCheck = msg.reactions.some((r) => r.name === "white_check_mark");
+      const hasCheck = msg.reactions.some((r) => r.name === "check_colorful");
       if (statusFilter === "done" && !hasCheck) return false;
       if (statusFilter === "pending" && hasCheck) return false;
     }
@@ -2187,7 +2205,7 @@ function MessageCard({
               <div className="flex flex-wrap gap-1 mt-2">
                 {msg.reactions.map((r, i) => (
                   <span key={i} className="inline-flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">
-                    <span className="text-sm">{emojiFromName(r.name)}</span>
+                    <EmojiDisplay name={r.name} />
                     <span className="font-medium">{r.count}</span>
                   </span>
                 ))}
