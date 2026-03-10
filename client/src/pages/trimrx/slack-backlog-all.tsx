@@ -2493,9 +2493,14 @@ function MessageCard({
                 <span className="text-muted-foreground">Outcome</span>
                 <span className="font-medium text-foreground truncate max-w-[160px]" title={trackerMatch ? (trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"] || "") : ""} data-testid={`tracker-outcome-${msg.ts}`}>{trackerMatch ? (trackerMatch["OUTCOME"] || trackerMatch["Outcome"] || trackerMatch["outcome"] || "—") : "—"}</span>
               </div>
-              <div className="flex justify-between gap-2">
+              <div className="flex justify-between gap-2 relative group/notes">
                 <span className="text-muted-foreground whitespace-nowrap">TrimRx Agent Notes</span>
-                <span className="font-medium text-foreground text-right truncate max-w-[140px]" title={trackerMatch ? (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"] || "") : ""} data-testid={`tracker-notes-${msg.ts}`}>{trackerMatch ? (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"] || "—") : "—"}</span>
+                <span className="font-medium text-foreground text-right truncate max-w-[140px] cursor-default" data-testid={`tracker-notes-${msg.ts}`}>{trackerMatch ? (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"] || "—") : "—"}</span>
+                {trackerMatch && (trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"]) && (
+                  <div className="hidden group-hover/notes:block absolute right-0 top-full mt-1 z-50 w-[300px] p-3 rounded-lg shadow-lg bg-yellow-50 dark:bg-yellow-950/40 border border-yellow-200 dark:border-yellow-800 text-sm text-foreground whitespace-pre-wrap break-words">
+                    {trackerMatch["Notes TrimRX"] || trackerMatch["TrimRx Agent Notes"] || trackerMatch["trimrx_agent_notes"] || trackerMatch["Notes"]}
+                  </div>
+                )}
               </div>
             </div>
           </div>
