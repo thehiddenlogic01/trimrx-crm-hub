@@ -61,6 +61,7 @@ interface SlackMessage {
 interface SlackUser {
   name: string;
   real_name: string;
+  display_name?: string;
   avatar: string;
 }
 
@@ -171,7 +172,8 @@ function formatSlackText(text: string, users?: Record<string, SlackUser>) {
     })
     .replace(/<@([A-Za-z0-9]+)(?:\|[^>]*)?>/g, (_m, userId) => {
       const ph = `__LINK${i++}__`;
-      const name = users?.[userId]?.real_name || users?.[userId]?.name || userId;
+      const u = users?.[userId];
+      const name = u?.real_name || u?.display_name || u?.name || userId;
       links.push({ placeholder: ph, html: `<span class="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1 rounded font-medium">@${escapeHtml(name)}</span>` });
       return ph;
     })
@@ -858,6 +860,8 @@ export default function SlackMessagesPage() {
     enabled: slackStatus?.connected === true,
   });
 
+  const resolvedUsersRef = useRef<Set<string>>(new Set());
+
   const snapshotChannelCache = () => {
     const cache = queryClient.getQueriesData<unknown>({ queryKey: ["/api/slack/channels", CHANNEL_ID] });
     return cache.map(([key, data]) => ({ key, data }));
@@ -866,9 +870,29 @@ export default function SlackMessagesPage() {
     snapshot.forEach(({ key, data }) => queryClient.setQueryData(key, data));
   };
 
+  const convertMentionsToIds = useCallback((text: string) => {
+    if (!users) return text;
+    return text.replace(/(?<![<@\w])@([A-Za-z][A-Za-z0-9 _.-]*[A-Za-z0-9])(?![>@])/g, (full, rawName, offset) => {
+      if (offset > 0 && text[offset - 1] === '<') return full;
+      const nameLower = rawName.toLowerCase().trim();
+      if (nameLower.length < 2) return full;
+      const matched = Object.entries(users).find(([, u]) => {
+        const rn = (u.real_name || "").toLowerCase();
+        const dn = (u.name || "").toLowerCase();
+        const displayName = (u.display_name || "").toLowerCase();
+        return (rn.length > 0 && rn === nameLower)
+          || (dn.length > 0 && dn === nameLower)
+          || (displayName.length > 0 && displayName === nameLower);
+      });
+      if (matched) return `<@${matched[0]}>`;
+      return full;
+    });
+  }, [users]);
+
   const replyMutation = useMutation({
     mutationFn: async ({ threadTs, text }: { threadTs: string; text: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { thread_ts: threadTs, text });
+      const converted = convertMentionsToIds(text);
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { thread_ts: threadTs, text: converted });
     },
     onMutate: ({ threadTs, text }) => {
       const snapshot = snapshotChannelCache();
@@ -1121,6 +1145,30 @@ export default function SlackMessagesPage() {
 
   const isSearchMode = debouncedSearch.length > 0;
   const baseMessages = isSearchMode ? (searchResults || []) : (messages || []);
+
+  useEffect(() => {
+    if (!users || !baseMessages || baseMessages.length === 0) return;
+    const unknownIds = new Set<string>();
+    const userIdPattern = /<@([A-Z0-9]+)(?:\|[^>]*)?>/g;
+    for (const msg of baseMessages) {
+      let match;
+      while ((match = userIdPattern.exec(msg.text)) !== null) {
+        if (!users[match[1]] && !resolvedUsersRef.current.has(match[1])) unknownIds.add(match[1]);
+      }
+      if (msg.user && !users[msg.user] && !resolvedUsersRef.current.has(msg.user)) unknownIds.add(msg.user);
+    }
+    if (unknownIds.size === 0) return;
+    const ids = Array.from(unknownIds).slice(0, 50);
+    ids.forEach((id) => resolvedUsersRef.current.add(id));
+    apiRequest("POST", "/api/slack/users/resolve", { userIds: ids })
+      .then((res) => res.json())
+      .then((resolved) => {
+        if (resolved && Object.keys(resolved).length > 0) {
+          queryClient.setQueryData<Record<string, SlackUser>>(["/api/slack/users"], (old) => ({ ...old, ...resolved }));
+        }
+      })
+      .catch(() => {});
+  }, [users, baseMessages]);
 
   const passesBaseFilters = useCallback((msg: SlackMessage) => {
     if (mentionFilter !== "all") {
@@ -1477,7 +1525,8 @@ export default function SlackMessagesPage() {
 
   function getUserName(userId: string) {
     if (!users || !users[userId]) return userId;
-    return users[userId].real_name || users[userId].name;
+    const u = users[userId];
+    return u.display_name || u.real_name || u.name || userId;
   }
 
   function getUserAvatar(userId: string) {
@@ -2338,6 +2387,31 @@ function MessageCard({
     retry: 1,
     staleTime: 3 * 60 * 1000,
   });
+
+  const replyResolvedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!threadReplies || !users) return;
+    const unknownIds = new Set<string>();
+    const userIdPattern = /<@([A-Z0-9]+)(?:\|[^>]*)?>/g;
+    for (const reply of threadReplies) {
+      if (reply.user && !users[reply.user] && !replyResolvedRef.current.has(reply.user)) unknownIds.add(reply.user);
+      let match;
+      while ((match = userIdPattern.exec(reply.text)) !== null) {
+        if (!users[match[1]] && !replyResolvedRef.current.has(match[1])) unknownIds.add(match[1]);
+      }
+    }
+    if (unknownIds.size === 0) return;
+    const ids = Array.from(unknownIds).slice(0, 50);
+    ids.forEach((id) => replyResolvedRef.current.add(id));
+    apiRequest("POST", "/api/slack/users/resolve", { userIds: ids })
+      .then((res) => res.json())
+      .then((resolved) => {
+        if (resolved && Object.keys(resolved).length > 0) {
+          queryClient.setQueryData<Record<string, SlackUser>>(["/api/slack/users"], (old) => ({ ...old, ...resolved }));
+        }
+      })
+      .catch(() => {});
+  }, [threadReplies, users]);
 
   const isReply = msg.thread_ts && msg.thread_ts !== msg.ts;
   const parentPreview = msg.parent_text
