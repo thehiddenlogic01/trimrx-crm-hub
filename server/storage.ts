@@ -34,6 +34,9 @@ export interface IStorage {
   deleteAllDisputeReportsYedid(): Promise<void>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(filters: { userId?: string; page?: string; action?: string; from?: Date; to?: Date; limit?: number; offset?: number }): Promise<{ logs: AuditLog[]; total: number }>;
+  getAuditLogById(id: number): Promise<any | undefined>;
+  deleteAuditLog(id: number): Promise<boolean>;
+  deleteAuditLogsBulk(ids: number[]): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -191,6 +194,30 @@ export class DatabaseStorage implements IStorage {
     const logs = await db.select().from(auditLogs).where(where).orderBy(desc(auditLogs.createdAt)).limit(filters.limit || 50).offset(filters.offset || 0);
 
     return { logs, total: totalResult?.count || 0 };
+  }
+
+  async getAuditLogById(id: number): Promise<any | undefined> {
+    const [log] = await db.select().from(auditLogs).where(eq(auditLogs.id, id));
+    return log;
+  }
+
+  async deleteAuditLog(id: number): Promise<boolean> {
+    const existing = await this.getAuditLogById(id);
+    if (!existing) return false;
+    await db.delete(auditLogs).where(eq(auditLogs.id, id));
+    return true;
+  }
+
+  async deleteAuditLogsBulk(ids: number[]): Promise<number> {
+    let deleted = 0;
+    for (const id of ids) {
+      const existing = await this.getAuditLogById(id);
+      if (existing) {
+        await db.delete(auditLogs).where(eq(auditLogs.id, id));
+        deleted++;
+      }
+    }
+    return deleted;
   }
 }
 

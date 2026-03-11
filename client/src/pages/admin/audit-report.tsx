@@ -1,12 +1,15 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ChevronLeft, ChevronRight, ClipboardCheck, Filter, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Loader2, ChevronLeft, ChevronRight, ClipboardCheck, Filter, X, Eye, Trash2, AlertTriangle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 interface AuditLog {
   id: number;
@@ -27,6 +30,16 @@ interface UserItem {
   id: string;
   username: string;
   role: string;
+}
+
+interface ContextData {
+  type: "slack" | "cv-report" | "retention" | "unknown";
+  data: any;
+  message?: string;
+  ts?: string;
+  channelId?: string;
+  caseId?: string;
+  email?: string;
 }
 
 const PAGE_SIZES = [25, 50, 100];
@@ -69,8 +82,174 @@ const AVAILABLE_PAGES = [
   "Retention Final Submit",
 ];
 
+function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open: boolean; onClose: () => void }) {
+  const { data: contextData, isLoading } = useQuery<ContextData>({
+    queryKey: ["/api/audit-logs", log?.id, "context"],
+    queryFn: async () => {
+      const res = await fetch(`/api/audit-logs/${log!.id}/context`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: open && !!log,
+  });
+
+  const renderSlackContent = (ctx: ContextData) => {
+    if (ctx.data) {
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Channel: {ctx.data.channelId}</span>
+            <span>|</span>
+            <span>Timestamp: {ctx.data.ts}</span>
+            {ctx.data.user && <><span>|</span><span>User: {ctx.data.user}</span></>}
+          </div>
+          <div className="bg-muted/50 rounded-lg p-4 border whitespace-pre-wrap text-sm leading-relaxed">
+            {ctx.data.text || "(empty message)"}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-sm text-yellow-800 dark:text-yellow-300">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle className="h-4 w-4" />
+          <span className="font-medium">Message Unavailable</span>
+        </div>
+        <p>{ctx.message || "The message could not be retrieved."}</p>
+        {ctx.ts && <p className="text-xs mt-2 text-muted-foreground">Timestamp: {ctx.ts}, Channel: {ctx.channelId}</p>}
+      </div>
+    );
+  };
+
+  const renderCvReportContent = (ctx: ContextData) => {
+    if (ctx.data) {
+      const report = ctx.data;
+      const fields = [
+        { label: "Case ID", value: report.caseId },
+        { label: "Customer Email", value: report.customerEmail },
+        { label: "Customer Name", value: report.customerName },
+        { label: "Customer Phone", value: report.customerPhone },
+        { label: "Provider", value: report.provider },
+        { label: "Status", value: report.status },
+        { label: "Outcome", value: report.outcome },
+        { label: "Medication", value: report.medication },
+        { label: "Dosage", value: report.dosage },
+        { label: "Quantity", value: report.quantity },
+        { label: "Case Type", value: report.caseType },
+        { label: "Notes", value: report.notes },
+        { label: "Agent Notes", value: report.agentNotes },
+        { label: "Agent Assigned", value: report.agentAssigned },
+        { label: "Created", value: report.createdAt ? new Date(report.createdAt).toLocaleString() : null },
+      ].filter(f => f.value);
+
+      return (
+        <div className="space-y-3">
+          <div className="text-xs text-muted-foreground">Report ID: {report.id}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-muted/30 rounded-lg p-4 border">
+            {fields.map((f) => (
+              <div key={f.label} className="text-sm">
+                <span className="font-medium text-muted-foreground">{f.label}: </span>
+                <span>{f.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-sm text-yellow-800 dark:text-yellow-300">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle className="h-4 w-4" />
+          <span className="font-medium">Report Unavailable</span>
+        </div>
+        <p>{ctx.message || "The report could not be retrieved."}</p>
+        {ctx.caseId && <p className="text-xs mt-2 text-muted-foreground">Case ID: {ctx.caseId}</p>}
+        {ctx.email && <p className="text-xs mt-1 text-muted-foreground">Email: {ctx.email}</p>}
+      </div>
+    );
+  };
+
+  const renderRetentionContent = (ctx: ContextData) => {
+    return (
+      <div className="bg-muted/50 rounded-lg p-4 border text-sm">
+        <p>{ctx.message || ctx.data || "Push to Google Sheets action"}</p>
+      </div>
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            Action Details
+          </DialogTitle>
+          <DialogDescription className="sr-only">View the details of this audit log entry</DialogDescription>
+        </DialogHeader>
+
+        {log && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2 text-sm border-b pb-3">
+              <div>
+                <span className="text-muted-foreground">User: </span>
+                <span className="font-medium">{log.username}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Action: </span>
+                <Badge variant="secondary" className={`text-xs ${ACTION_COLORS[log.action] || ""}`}>{log.action}</Badge>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Page: </span>
+                <Badge variant="outline" className={`text-xs ${PAGE_COLORS[log.page] || ""}`}>{log.page}</Badge>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Time: </span>
+                <span className="text-xs">{new Date(log.createdAt).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2 font-mono break-all">
+              {log.details || "No details"}
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Original Content</h4>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+                </div>
+              ) : contextData ? (
+                <>
+                  {contextData.type === "slack" && renderSlackContent(contextData)}
+                  {contextData.type === "cv-report" && renderCvReportContent(contextData)}
+                  {contextData.type === "retention" && renderRetentionContent(contextData)}
+                  {contextData.type === "unknown" && (
+                    <div className="bg-muted/50 rounded-lg p-4 border text-sm text-muted-foreground">
+                      {contextData.message || "No additional context available"}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">Could not load context</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} data-testid="button-close-view">Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AuditReportPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedUser, setSelectedUser] = useState<string>("all");
   const [selectedPage, setSelectedPage] = useState<string>("all");
   const [selectedAction, setSelectedAction] = useState<string>("all");
@@ -78,6 +257,10 @@ export default function AuditReportPage() {
   const [dateTo, setDateTo] = useState<string>("");
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const [viewLog, setViewLog] = useState<AuditLog | null>(null);
+  const [deleteLog, setDeleteLog] = useState<AuditLog | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data: allUsers } = useQuery<UserItem[]>({
     queryKey: ["/api/users"],
@@ -105,6 +288,43 @@ export default function AuditReportPage() {
     enabled: user?.role === "admin",
   });
 
+  const invalidateAllAuditQueries = () => {
+    queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey[0];
+        return typeof key === "string" && key.startsWith("/api/audit-logs");
+      },
+    });
+  };
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/audit-logs/${id}`);
+    },
+    onSuccess: () => {
+      invalidateAllAuditQueries();
+      toast({ title: "Audit log deleted" });
+      setDeleteLog(null);
+    },
+    onError: () => {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      await apiRequest("POST", "/api/audit-logs/delete-bulk", { ids });
+    },
+    onSuccess: () => {
+      invalidateAllAuditQueries();
+      toast({ title: `${selectedIds.size} log(s) deleted` });
+      setSelectedIds(new Set());
+    },
+    onError: () => {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    },
+  });
+
   const totalPages = Math.ceil((auditData?.total || 0) / pageSize);
   const hasFilters = selectedUser !== "all" || selectedPage !== "all" || selectedAction !== "all" || dateFrom || dateTo;
 
@@ -115,6 +335,7 @@ export default function AuditReportPage() {
     setDateFrom("");
     setDateTo("");
     setCurrentPage(1);
+    setSelectedIds(new Set());
   };
 
   const formatDate = (dateStr: string) => {
@@ -125,6 +346,24 @@ export default function AuditReportPage() {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (!auditData?.logs) return;
+    if (selectedIds.size === auditData.logs.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(auditData.logs.map(l => l.id)));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
@@ -165,7 +404,7 @@ export default function AuditReportPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">User</label>
-              <Select value={selectedUser} onValueChange={(v) => { setSelectedUser(v); setCurrentPage(1); }}>
+              <Select value={selectedUser} onValueChange={(v) => { setSelectedUser(v); setCurrentPage(1); setSelectedIds(new Set()); }}>
                 <SelectTrigger className="h-9" data-testid="select-user-filter">
                   <SelectValue placeholder="All Users" />
                 </SelectTrigger>
@@ -180,7 +419,7 @@ export default function AuditReportPage() {
 
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Page</label>
-              <Select value={selectedPage} onValueChange={(v) => { setSelectedPage(v); setCurrentPage(1); }}>
+              <Select value={selectedPage} onValueChange={(v) => { setSelectedPage(v); setCurrentPage(1); setSelectedIds(new Set()); }}>
                 <SelectTrigger className="h-9" data-testid="select-page-filter">
                   <SelectValue placeholder="All Pages" />
                 </SelectTrigger>
@@ -195,7 +434,7 @@ export default function AuditReportPage() {
 
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">Action</label>
-              <Select value={selectedAction} onValueChange={(v) => { setSelectedAction(v); setCurrentPage(1); }}>
+              <Select value={selectedAction} onValueChange={(v) => { setSelectedAction(v); setCurrentPage(1); setSelectedIds(new Set()); }}>
                 <SelectTrigger className="h-9" data-testid="select-action-filter">
                   <SelectValue placeholder="All Actions" />
                 </SelectTrigger>
@@ -213,7 +452,7 @@ export default function AuditReportPage() {
               <Input
                 type="date"
                 value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
                 className="h-9"
                 data-testid="input-date-from"
               />
@@ -224,7 +463,7 @@ export default function AuditReportPage() {
               <Input
                 type="date"
                 value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+                onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); setSelectedIds(new Set()); }}
                 className="h-9"
                 data-testid="input-date-to"
               />
@@ -245,8 +484,21 @@ export default function AuditReportPage() {
               )}
             </CardTitle>
             <div className="flex items-center gap-2">
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+                  disabled={bulkDeleteMutation.isPending}
+                  data-testid="button-bulk-delete"
+                >
+                  {bulkDeleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Trash2 className="h-3 w-3 mr-1" />}
+                  Delete {selectedIds.size} selected
+                </Button>
+              )}
               <label className="text-xs text-muted-foreground">Per page:</label>
-              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); }}>
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setCurrentPage(1); setSelectedIds(new Set()); }}>
                 <SelectTrigger className="h-8 w-20" data-testid="select-page-size">
                   <SelectValue />
                 </SelectTrigger>
@@ -282,16 +534,35 @@ export default function AuditReportPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
+                      <th className="p-3 w-[40px]">
+                        <input
+                          type="checkbox"
+                          checked={auditData.logs.length > 0 && selectedIds.size === auditData.logs.length}
+                          onChange={toggleSelectAll}
+                          className="rounded border-gray-300"
+                          data-testid="checkbox-select-all"
+                        />
+                      </th>
                       <th className="text-left p-3 font-medium w-[170px]">Date & Time</th>
-                      <th className="text-left p-3 font-medium w-[120px]">User</th>
-                      <th className="text-left p-3 font-medium w-[160px]">Action</th>
-                      <th className="text-left p-3 font-medium w-[170px]">Page</th>
+                      <th className="text-left p-3 font-medium w-[100px]">User</th>
+                      <th className="text-left p-3 font-medium w-[150px]">Action</th>
+                      <th className="text-left p-3 font-medium w-[160px]">Page</th>
                       <th className="text-left p-3 font-medium">Details</th>
+                      <th className="text-center p-3 font-medium w-[110px]">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {auditData.logs.map((log) => (
                       <tr key={log.id} className="hover:bg-muted/30 transition-colors" data-testid={`row-audit-${log.id}`}>
+                        <td className="p-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(log.id)}
+                            onChange={() => toggleSelect(log.id)}
+                            className="rounded border-gray-300"
+                            data-testid={`checkbox-select-${log.id}`}
+                          />
+                        </td>
                         <td className="p-3 text-xs text-muted-foreground whitespace-nowrap" data-testid={`text-date-${log.id}`}>
                           {formatDate(log.createdAt)}
                         </td>
@@ -308,8 +579,32 @@ export default function AuditReportPage() {
                             {log.page}
                           </Badge>
                         </td>
-                        <td className="p-3 text-xs text-muted-foreground max-w-[300px] truncate" title={log.details || ""} data-testid={`text-details-${log.id}`}>
+                        <td className="p-3 text-xs text-muted-foreground max-w-[250px] truncate" title={log.details || ""} data-testid={`text-details-${log.id}`}>
                           {log.details || "—"}
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/40"
+                              onClick={() => setViewLog(log)}
+                              title="View details"
+                              data-testid={`button-view-${log.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                              onClick={() => setDeleteLog(log)}
+                              title="Delete log"
+                              data-testid={`button-delete-${log.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -328,7 +623,7 @@ export default function AuditReportPage() {
                       size="sm"
                       className="h-8"
                       disabled={currentPage <= 1}
-                      onClick={() => setCurrentPage((p) => p - 1)}
+                      onClick={() => { setCurrentPage((p) => p - 1); setSelectedIds(new Set()); }}
                       data-testid="button-prev-page"
                     >
                       <ChevronLeft className="h-4 w-4" />
@@ -350,7 +645,7 @@ export default function AuditReportPage() {
                           variant={currentPage === page ? "default" : "outline"}
                           size="sm"
                           className="h-8 w-8 p-0"
-                          onClick={() => setCurrentPage(page)}
+                          onClick={() => { setCurrentPage(page); setSelectedIds(new Set()); }}
                           data-testid={`button-page-${page}`}
                         >
                           {page}
@@ -362,7 +657,7 @@ export default function AuditReportPage() {
                       size="sm"
                       className="h-8"
                       disabled={currentPage >= totalPages}
-                      onClick={() => setCurrentPage((p) => p + 1)}
+                      onClick={() => { setCurrentPage((p) => p + 1); setSelectedIds(new Set()); }}
                       data-testid="button-next-page"
                     >
                       <ChevronRight className="h-4 w-4" />
@@ -374,6 +669,46 @@ export default function AuditReportPage() {
           )}
         </CardContent>
       </Card>
+
+      <ViewContextDialog
+        log={viewLog}
+        open={!!viewLog}
+        onClose={() => setViewLog(null)}
+      />
+
+      <Dialog open={!!deleteLog} onOpenChange={(v) => !v && setDeleteLog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Audit Log
+            </DialogTitle>
+            <DialogDescription className="sr-only">Confirm deletion of this audit log entry</DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete this audit log entry?
+          </p>
+          {deleteLog && (
+            <div className="bg-muted/50 rounded-lg p-3 text-xs space-y-1">
+              <p><span className="font-medium">User:</span> {deleteLog.username}</p>
+              <p><span className="font-medium">Action:</span> {deleteLog.action}</p>
+              <p><span className="font-medium">Time:</span> {formatDate(deleteLog.createdAt)}</p>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteLog(null)} data-testid="button-cancel-delete">Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteLog && deleteMutation.mutate(deleteLog.id)}
+              disabled={deleteMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
