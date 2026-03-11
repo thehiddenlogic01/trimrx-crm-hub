@@ -62,6 +62,7 @@ const ACTION_COLORS: Record<string, string> = {
 const PAGE_COLORS: Record<string, string> = {
   "CV Report": "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
   "Manage Slack Case": "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300",
+  "Slack Backlog All": "bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300",
   "Retention Final Submit": "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
 };
 
@@ -79,6 +80,7 @@ const AVAILABLE_ACTIONS = [
 const AVAILABLE_PAGES = [
   "CV Report",
   "Manage Slack Case",
+  "Slack Backlog All",
   "Retention Final Submit",
 ];
 
@@ -392,7 +394,7 @@ export default function AuditReportPage() {
         <ClipboardCheck className="h-7 w-7 text-primary" />
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Audit Report</h1>
-          <p className="text-sm text-muted-foreground">Track all user actions across CV Report, Manage Slack Case, and Retention Final Submit</p>
+          <p className="text-sm text-muted-foreground">Track all user actions across CV Report, Manage Slack Case, Slack Backlog All, and Retention Final Submit</p>
         </div>
       </div>
 

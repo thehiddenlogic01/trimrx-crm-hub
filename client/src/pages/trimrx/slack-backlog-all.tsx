@@ -892,7 +892,7 @@ export default function SlackMessagesPage() {
   const replyMutation = useMutation({
     mutationFn: async ({ threadTs, text }: { threadTs: string; text: string }) => {
       const converted = convertMentionsToIds(text);
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { thread_ts: threadTs, text: converted });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { thread_ts: threadTs, text: converted }, { "x-audit-source": "Slack Backlog All" });
     },
     onMutate: ({ threadTs, text }) => {
       const snapshot = snapshotChannelCache();
@@ -931,7 +931,7 @@ export default function SlackMessagesPage() {
 
   const reactMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, name: "check_colorful" });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, name: "check_colorful" }, { "x-audit-source": "Slack Backlog All" });
     },
     onMutate: ({ timestamp }) => {
       const snapshot = snapshotChannelCache();
@@ -961,7 +961,7 @@ export default function SlackMessagesPage() {
 
   const unreactMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, name: "check_colorful" });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, name: "check_colorful" }, { "x-audit-source": "Slack Backlog All" });
     },
     onMutate: ({ timestamp }) => {
       const snapshot = snapshotChannelCache();
@@ -994,7 +994,7 @@ export default function SlackMessagesPage() {
 
   const deleteMessageMutation = useMutation({
     mutationFn: async ({ timestamp }: { timestamp: string }) => {
-      await apiRequest("DELETE", `/api/slack/channels/${CHANNEL_ID}/messages/${timestamp}`);
+      await apiRequest("DELETE", `/api/slack/channels/${CHANNEL_ID}/messages/${timestamp}`, undefined, { "x-audit-source": "Slack Backlog All" });
     },
     onMutate: ({ timestamp }) => {
       const snapshot = snapshotChannelCache();
@@ -1104,13 +1104,13 @@ export default function SlackMessagesPage() {
         await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, {
           thread_ts: threadTs,
           text: cvInfo.status,
-        });
+        }, { "x-audit-source": "Slack Backlog All" });
         const hasCheck = msg.reactions.some((r) => r.name === "check_colorful");
         if (!hasCheck) {
           await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, {
             timestamp: msg.ts,
             name: "check_colorful",
-          });
+          }, { "x-audit-source": "Slack Backlog All" });
         }
         successCount++;
       } catch {

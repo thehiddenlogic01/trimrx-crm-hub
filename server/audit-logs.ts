@@ -75,7 +75,7 @@ export function setupAuditLogRoutes(app: Express) {
       const log = await storage.getAuditLogById(id);
       if (!log) return res.status(404).json({ message: "Audit log not found" });
 
-      if (log.page === "Manage Slack Case") {
+      if (log.page === "Manage Slack Case" || log.page === "Slack Backlog All") {
         const parsed = parseSlackDetails(log.details || "");
         if (!parsed) return res.json({ type: "slack", data: null, message: "Could not parse message details" });
 

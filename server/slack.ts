@@ -886,7 +886,8 @@ export function setupSlackRoutes(app: Express) {
       }
       delete replyCache[`${channelId}:${thread_ts}`];
       const parentText = findMessageTextFromCache(channelId, thread_ts);
-      logAudit(req, "Reply Sent", "Manage Slack Case", `Thread: ${thread_ts}, Channel: ${channelId}, Reply: ${text}` + (parentText ? `\n---MSG---\n${parentText}` : ""));
+      const auditPage = (req.headers["x-audit-source"] as string) || "Manage Slack Case";
+      logAudit(req, "Reply Sent", auditPage, `Thread: ${thread_ts}, Channel: ${channelId}, Reply: ${text}` + (parentText ? `\n---MSG---\n${parentText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to send reply" });
@@ -1099,7 +1100,8 @@ export function setupSlackRoutes(app: Express) {
       });
       patchCachedReaction(channelId, timestamp, name, true, botUserId);
       const msgText = findMessageTextFromCache(channelId, timestamp);
-      logAudit(req, "Mark as Done", "Manage Slack Case", `Message: ${timestamp}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
+      const auditPage = (req.headers["x-audit-source"] as string) || "Manage Slack Case";
+      logAudit(req, "Mark as Done", auditPage, `Message: ${timestamp}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       if (err.data?.error === "already_reacted") {
@@ -1130,7 +1132,8 @@ export function setupSlackRoutes(app: Express) {
       });
       patchCachedReaction(channelId, timestamp, name, false, botUserId);
       const msgText = findMessageTextFromCache(channelId, timestamp);
-      logAudit(req, "Unmark Done", "Manage Slack Case", `Message: ${timestamp}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
+      const auditPage = (req.headers["x-audit-source"] as string) || "Manage Slack Case";
+      logAudit(req, "Unmark Done", auditPage, `Message: ${timestamp}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       if (err.data?.error === "no_reaction") {
@@ -1163,7 +1166,8 @@ export function setupSlackRoutes(app: Express) {
       for (const key of Object.keys(replyCache)) {
         if (key.startsWith(channelId + ":")) delete replyCache[key];
       }
-      logAudit(req, "Delete Message", "Manage Slack Case", `Message: ${ts}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
+      const auditPage = (req.headers["x-audit-source"] as string) || "Manage Slack Case";
+      logAudit(req, "Delete Message", auditPage, `Message: ${ts}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to delete message" });
