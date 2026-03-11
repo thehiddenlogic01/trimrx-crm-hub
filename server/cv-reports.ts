@@ -5,6 +5,7 @@ import { google } from "googleapis";
 import { storage } from "./storage";
 import { insertCvReportSchema } from "@shared/schema";
 import { carevalidateProgressStore } from "./carevalidate";
+import { logAudit } from "./audit-logs";
 
 const partialCvReportSchema = insertCvReportSchema.partial();
 
@@ -789,6 +790,7 @@ export function setupCvReportRoutes(app: Express) {
     try {
       const parsed = insertCvReportSchema.parse(req.body);
       const report = await storage.createCvReport(parsed);
+      logAudit(req, "CV Report Created", "CV Report", `Case: ${parsed.caseId || "N/A"}, Email: ${parsed.customerEmail || "N/A"}`);
       return res.status(201).json(report);
     } catch (err: any) {
       return res.status(400).json({ message: err.message || "Invalid data" });
@@ -802,6 +804,7 @@ export function setupCvReportRoutes(app: Express) {
       const parsed = partialCvReportSchema.parse(req.body);
       const updated = await storage.updateCvReport(id, parsed);
       if (!updated) return res.status(404).json({ message: "Report not found" });
+      logAudit(req, "CV Report Updated", "CV Report", `Report ID: ${id}, Fields: ${Object.keys(parsed).join(", ")}`);
       return res.json(updated);
     } catch (err: any) {
       return res.status(400).json({ message: err.message || "Failed to update" });
@@ -856,6 +859,7 @@ export function setupCvReportRoutes(app: Express) {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       await storage.deleteCvReport(id);
+      logAudit(req, "CV Report Deleted", "CV Report", `Report ID: ${id}`);
       return res.json({ ok: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to delete" });

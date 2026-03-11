@@ -99,6 +99,20 @@ export const insertDisputeReportYedidSchema = createInsertSchema(disputeReportsY
 export type InsertDisputeReportYedid = z.infer<typeof insertDisputeReportYedidSchema>;
 export type DisputeReportYedid = typeof disputeReportsYedid.$inferSelect;
 
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  username: text("username").notNull(),
+  action: text("action").notNull(),
+  page: text("page").notNull(),
+  details: text("details").default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,

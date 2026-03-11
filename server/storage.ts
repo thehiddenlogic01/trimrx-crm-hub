@@ -1,6 +1,6 @@
-import { type User, type InsertUser, type CvReport, type InsertCvReport, type CaseFolder, type InsertCaseFolder, type CaseFile, type InsertCaseFile, type DisputeReportYedid, type InsertDisputeReportYedid, users, appSettings, cvReports, caseFolders, caseFiles, disputeReportsYedid } from "@shared/schema";
+import { type User, type InsertUser, type CvReport, type InsertCvReport, type CaseFolder, type InsertCaseFolder, type CaseFile, type InsertCaseFile, type DisputeReportYedid, type InsertDisputeReportYedid, type AuditLog, type InsertAuditLog, users, appSettings, cvReports, caseFolders, caseFiles, disputeReportsYedid, auditLogs } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, gte, lte, count, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -32,6 +32,8 @@ export interface IStorage {
   updateDisputeReportYedid(id: number, data: Partial<InsertDisputeReportYedid>): Promise<DisputeReportYedid | undefined>;
   deleteDisputeReportYedid(id: number): Promise<void>;
   deleteAllDisputeReportsYedid(): Promise<void>;
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(filters: { userId?: string; page?: string; action?: string; from?: Date; to?: Date; limit?: number; offset?: number }): Promise<{ logs: AuditLog[]; total: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -168,6 +170,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAllDisputeReportsYedid(): Promise<void> {
     await db.delete(disputeReportsYedid);
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [created] = await db.insert(auditLogs).values(log).returning();
+    return created;
+  }
+
+  async getAuditLogs(filters: { userId?: string; page?: string; action?: string; from?: Date; to?: Date; limit?: number; offset?: number }): Promise<{ logs: AuditLog[]; total: number }> {
+    const conditions = [];
+    if (filters.userId) conditions.push(eq(auditLogs.userId, filters.userId));
+    if (filters.page) conditions.push(eq(auditLogs.page, filters.page));
+    if (filters.action) conditions.push(eq(auditLogs.action, filters.action));
+    if (filters.from) conditions.push(gte(auditLogs.createdAt, filters.from));
+    if (filters.to) conditions.push(lte(auditLogs.createdAt, filters.to));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [totalResult] = await db.select({ count: count() }).from(auditLogs).where(where);
+    const logs = await db.select().from(auditLogs).where(where).orderBy(desc(auditLogs.createdAt)).limit(filters.limit || 50).offset(filters.offset || 0);
+
+    return { logs, total: totalResult?.count || 0 };
   }
 }
 

@@ -13,6 +13,7 @@ import { setupCareValidateRoutes } from "./carevalidate";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { setupPtFinderRoutes } from "./pt-finder";
 import { registerStripePaymentRoutes } from "./stripe-payments";
+import { setupAuditLogRoutes } from "./audit-logs";
 import { seedDefaultUser } from "./seed";
 
 export async function registerRoutes(
@@ -32,6 +33,7 @@ export async function registerRoutes(
   registerChatRoutes(app);
   setupPtFinderRoutes(app);
   registerStripePaymentRoutes(app);
+  setupAuditLogRoutes(app);
   await seedDefaultUser();
 
   return httpServer;

@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { google } from "googleapis";
 import { storage } from "./storage";
+import { logAudit } from "./audit-logs";
 import { ALL_REASONS, ALL_SUB_REASONS, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS } from "../shared/classification";
 
 const GSHEET_SETTINGS_PREFIX = "gsheet_";
@@ -285,6 +286,7 @@ export function setupGSheetsRoutes(app: Express) {
         await storage.updateCvReport(report.id, { sentToSheet: "yes" } as any);
       }
 
+      logAudit(req, "Push to Google Sheets", "Retention Final Submit", `Pushed ${selectedReports.length} report(s)`);
       res.json({ success: true, pushed: selectedReports.length });
     } catch (err: any) {
       res.status(500).json({ error: `Push failed: ${err.message}` });
