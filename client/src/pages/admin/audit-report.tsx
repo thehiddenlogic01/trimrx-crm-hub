@@ -66,6 +66,63 @@ const PAGE_COLORS: Record<string, string> = {
   "Retention Final Submit": "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
 };
 
+const SLACK_EMOJI: Record<string, string> = {
+  small_orange_diamond: "🔸", white_check_mark: "✅", heavy_check_mark: "✔️", ballot_box_with_check: "☑️",
+  warning: "⚠️", x: "❌", exclamation: "❗", question: "❓", point_right: "👉", point_left: "👈",
+  tada: "🎉", thumbsup: "👍", thumbsdown: "👎", pray: "🙏", eyes: "👀", wave: "👋", fire: "🔥",
+  rotating_light: "🚨", memo: "📝", phone: "📞", email: "📧", star: "⭐", heart: "❤️",
+  green_heart: "💚", blue_heart: "💙", arrow_right: "➡️", arrow_left: "⬅️", check: "✓",
+  heavy_plus_sign: "➕", heavy_minus_sign: "➖", pill: "💊", syringe: "💉", hospital: "🏥",
+  money_with_wings: "💸", dollar: "💵", credit_card: "💳", package: "📦", truck: "🚚",
+};
+
+function escapeHtmlAudit(str: string) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function formatSlackTextAudit(text: string, users?: Record<string, string>) {
+  const links: { placeholder: string; html: string }[] = [];
+  let i = 0;
+  let safe = text
+    .replace(/<(https?:\/\/[^|>]+)\|([^>]+)>/g, (_m, url, label) => {
+      const ph = `__LINK${i++}__`;
+      links.push({ placeholder: ph, html: `<a href="${escapeHtmlAudit(url)}" target="_blank" rel="noopener noreferrer" class="text-primary underline">${escapeHtmlAudit(label)}</a>` });
+      return ph;
+    })
+    .replace(/<(https?:\/\/[^>]+)>/g, (_m, url) => {
+      const ph = `__LINK${i++}__`;
+      links.push({ placeholder: ph, html: `<a href="${escapeHtmlAudit(url)}" target="_blank" rel="noopener noreferrer" class="text-primary underline break-all">${escapeHtmlAudit(url)}</a>` });
+      return ph;
+    })
+    .replace(/<@([A-Za-z0-9]+)(?:\|[^>]*)?>/g, (_m, userId) => {
+      const ph = `__LINK${i++}__`;
+      const name = users?.[userId] || userId;
+      links.push({ placeholder: ph, html: `<span class="bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1 rounded font-medium">@${escapeHtmlAudit(name)}</span>` });
+      return ph;
+    })
+    .replace(/<mailto:([^|>]+)\|([^>]+)>/g, (_m, email, label) => {
+      const ph = `__LINK${i++}__`;
+      links.push({ placeholder: ph, html: `<a href="mailto:${escapeHtmlAudit(email)}" class="text-primary underline">${escapeHtmlAudit(label)}</a>` });
+      return ph;
+    })
+    .replace(/<tel:([^|>]+)\|([^>]+)>/g, (_m, phone, label) => {
+      const ph = `__LINK${i++}__`;
+      links.push({ placeholder: ph, html: `<a href="tel:${escapeHtmlAudit(phone)}" class="text-primary underline">${escapeHtmlAudit(label)}</a>` });
+      return ph;
+    })
+    .replace(/:([a-z0-9_+-]+):/g, (_m, name) => {
+      const emoji = SLACK_EMOJI[name];
+      return emoji || `:${name}:`;
+    });
+  safe = escapeHtmlAudit(safe);
+  safe = safe.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>');
+  for (const link of links) {
+    safe = safe.replace(link.placeholder, link.html);
+  }
+  safe = safe.replace(/\n/g, "<br/>");
+  return safe;
+}
+
 const AVAILABLE_ACTIONS = [
   "Reply Sent",
   "Mark as Done",
@@ -108,7 +165,7 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
             <span>Channel: {ctx.data.channelId}</span>
             <span>|</span>
             <span>Timestamp: {ctx.data.ts}</span>
-            {ctx.data.user && <><span>|</span><span>User: {ctx.data.user}</span></>}
+            {(ctx.data.userName || ctx.data.user) && <><span>|</span><span>User: {ctx.data.userName || ctx.data.user}</span></>}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -121,23 +178,25 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
               <Badge variant="outline" className="text-blue-700 border-blue-300 dark:text-blue-300 dark:border-blue-700" data-testid="badge-reply-count">💬 {replyCount} {replyCount === 1 ? "reply" : "replies"}</Badge>
             )}
             {reactions.length > 0 && reactions.map((r: any, i: number) => (
-              <span key={i} className="inline-flex items-center gap-1 text-xs bg-muted rounded px-1.5 py-0.5">:{r.name}: × {r.count}</span>
+              <span key={i} className="inline-flex items-center gap-1 text-xs bg-muted rounded px-1.5 py-0.5">{SLACK_EMOJI[r.name] || `:${r.name}:`} × {r.count}</span>
             ))}
           </div>
 
           <div>
             <p className="text-xs font-semibold text-muted-foreground mb-1">Original Message:</p>
-            <div className="bg-muted/50 rounded-lg p-4 border whitespace-pre-wrap text-sm leading-relaxed">
-              {ctx.data.text || "(empty message)"}
-            </div>
+            <div
+              className="bg-muted/50 rounded-lg p-4 border text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_strong]:font-bold"
+              dangerouslySetInnerHTML={{ __html: formatSlackTextAudit(ctx.data.text || "(empty message)", ctx.data.users) }}
+            />
           </div>
 
           {ctx.data.replyText && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-1">Reply Sent (this action):</p>
-              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800 whitespace-pre-wrap text-sm leading-relaxed">
-                {ctx.data.replyText}
-              </div>
+              <div
+                className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800 text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_strong]:font-bold"
+                dangerouslySetInnerHTML={{ __html: formatSlackTextAudit(ctx.data.replyText, ctx.data.users) }}
+              />
             </div>
           )}
 
@@ -148,11 +207,14 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
                 {replies.map((r: any, i: number) => (
                   <div key={i} className="bg-slate-50 dark:bg-slate-900/40 rounded-lg p-3 border text-sm" data-testid={`reply-item-${i}`}>
                     <div className="flex items-center gap-2 mb-1 text-xs text-muted-foreground">
-                      <span className="font-medium">{r.user}</span>
+                      <span className="font-medium">{r.userName || r.user}</span>
                       <span>·</span>
                       <span>{new Date(parseFloat(r.ts) * 1000).toLocaleString()}</span>
                     </div>
-                    <div className="whitespace-pre-wrap leading-relaxed">{r.text}</div>
+                    <div
+                      className="leading-relaxed [&_a]:text-primary [&_a]:underline [&_strong]:font-bold"
+                      dangerouslySetInnerHTML={{ __html: formatSlackTextAudit(r.text, ctx.data.users) }}
+                    />
                   </div>
                 ))}
               </div>

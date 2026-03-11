@@ -84,8 +84,10 @@ export function setupAuditLogRoutes(app: Express) {
           channelId: parsed.channelId,
           replyText: parsed.replyText || undefined,
           reactions: [] as { name: string; count: number; users: string[] }[],
-          replies: [] as { user: string; text: string; ts: string }[],
+          replies: [] as { user: string; text: string; ts: string; userName?: string }[],
           replyCount: 0,
+          userName: "" as string,
+          users: {} as Record<string, string>,
         };
 
         try {
@@ -135,6 +137,35 @@ export function setupAuditLogRoutes(app: Express) {
           return res.json({ type: "slack", data: null, ts: parsed.ts, channelId: parsed.channelId, message: "Message not available (may have been deleted)" });
         }
         if (!baseData.text) baseData.text = parsed.storedText;
+
+        try {
+          const botToken = await storage.getSetting("slack_bot_token");
+          if (botToken) {
+            const client = new WebClient(botToken);
+            const userIds = new Set<string>();
+            if (baseData.user) userIds.add(baseData.user);
+            for (const r of baseData.replies) if (r.user) userIds.add(r.user);
+            const mentionMatches = (baseData.text || "").matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g);
+            for (const m of mentionMatches) userIds.add(m[1]);
+            for (const r of baseData.replies) {
+              const rm = (r.text || "").matchAll(/<@([A-Z0-9]+)(?:\|[^>]*)?>/g);
+              for (const m of rm) userIds.add(m[1]);
+            }
+
+            const userMap: Record<string, string> = {};
+            for (const uid of userIds) {
+              try {
+                const info = await client.users.info({ user: uid });
+                if (info.user) {
+                  userMap[uid] = info.user.profile?.display_name || info.user.real_name || info.user.name || uid;
+                }
+              } catch {}
+            }
+            baseData.users = userMap;
+            if (baseData.user && userMap[baseData.user]) baseData.userName = userMap[baseData.user];
+            baseData.replies = baseData.replies.map((r: any) => ({ ...r, userName: userMap[r.user] || r.user }));
+          }
+        } catch {}
 
         return res.json({ type: "slack", data: baseData });
       }
