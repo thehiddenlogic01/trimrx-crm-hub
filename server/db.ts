@@ -27,6 +27,18 @@ export async function ensureSchema() {
       CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "audit_logs" (
+        "id" serial PRIMARY KEY,
+        "user_id" varchar NOT NULL,
+        "username" text NOT NULL,
+        "action" text NOT NULL,
+        "page" text NOT NULL,
+        "details" text DEFAULT '',
+        "created_at" timestamp DEFAULT now()
+      );
+    `);
+
     const cols = await pool.query(`
       SELECT column_name FROM information_schema.columns
       WHERE table_name = 'cv_reports'
