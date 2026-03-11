@@ -97,15 +97,26 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
     if (ctx.data) {
       return (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
             <span>Channel: {ctx.data.channelId}</span>
             <span>|</span>
             <span>Timestamp: {ctx.data.ts}</span>
             {ctx.data.user && <><span>|</span><span>User: {ctx.data.user}</span></>}
           </div>
-          <div className="bg-muted/50 rounded-lg p-4 border whitespace-pre-wrap text-sm leading-relaxed">
-            {ctx.data.text || "(empty message)"}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground mb-1">Original Message:</p>
+            <div className="bg-muted/50 rounded-lg p-4 border whitespace-pre-wrap text-sm leading-relaxed">
+              {ctx.data.text || "(empty message)"}
+            </div>
           </div>
+          {ctx.data.replyText && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Reply Sent:</p>
+              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800 whitespace-pre-wrap text-sm leading-relaxed">
+                {ctx.data.replyText}
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -210,7 +221,7 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
             </div>
 
             <div className="text-xs text-muted-foreground bg-muted/30 rounded px-3 py-2 font-mono break-all">
-              {log.details || "No details"}
+              {(log.details || "").split("\n---MSG---\n")[0] || "No details"}
             </div>
 
             <div>
@@ -579,8 +590,8 @@ export default function AuditReportPage() {
                             {log.page}
                           </Badge>
                         </td>
-                        <td className="p-3 text-xs text-muted-foreground max-w-[250px] truncate" title={log.details || ""} data-testid={`text-details-${log.id}`}>
-                          {log.details || "—"}
+                        <td className="p-3 text-xs text-muted-foreground max-w-[250px] truncate" title={(log.details || "").split("\n---MSG---\n")[0]} data-testid={`text-details-${log.id}`}>
+                          {(log.details || "").split("\n---MSG---\n")[0] || "—"}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center justify-center gap-1">

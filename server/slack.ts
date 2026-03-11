@@ -885,7 +885,8 @@ export function setupSlackRoutes(app: Express) {
         if (key.startsWith(channelId + ":") && entry.data) patchReplyCount(entry.data);
       }
       delete replyCache[`${channelId}:${thread_ts}`];
-      logAudit(req, "Reply Sent", "Manage Slack Case", `Thread: ${thread_ts}, Channel: ${channelId}`);
+      const parentText = findMessageTextFromCache(channelId, thread_ts);
+      logAudit(req, "Reply Sent", "Manage Slack Case", `Thread: ${thread_ts}, Channel: ${channelId}, Reply: ${text}` + (parentText ? `\n---MSG---\n${parentText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to send reply" });
@@ -1063,6 +1064,21 @@ export function setupSlackRoutes(app: Express) {
     }
   }
 
+  function findMessageTextFromCache(channelId: string, ts: string): string {
+    const cached = channelCache[channelId];
+    if (cached?.messages) {
+      const msg = cached.messages.find((m: any) => m.ts === ts);
+      if (msg?.text) return msg.text;
+    }
+    for (const [key, entry] of Object.entries(dateCache)) {
+      if (key.startsWith(channelId + ":") && entry.data) {
+        const msg = entry.data.find((m: any) => m.ts === ts);
+        if (msg?.text) return msg.text;
+      }
+    }
+    return "";
+  }
+
   app.post("/api/slack/channels/:channelId/react", async (req, res) => {
     const client = await requireSlack(req, res);
     if (!client) return;
@@ -1082,7 +1098,8 @@ export function setupSlackRoutes(app: Express) {
         name,
       });
       patchCachedReaction(channelId, timestamp, name, true, botUserId);
-      logAudit(req, "Mark as Done", "Manage Slack Case", `Message: ${timestamp}, Channel: ${channelId}`);
+      const msgText = findMessageTextFromCache(channelId, timestamp);
+      logAudit(req, "Mark as Done", "Manage Slack Case", `Message: ${timestamp}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       if (err.data?.error === "already_reacted") {
@@ -1112,7 +1129,8 @@ export function setupSlackRoutes(app: Express) {
         name,
       });
       patchCachedReaction(channelId, timestamp, name, false, botUserId);
-      logAudit(req, "Unmark Done", "Manage Slack Case", `Message: ${timestamp}, Channel: ${channelId}`);
+      const msgText = findMessageTextFromCache(channelId, timestamp);
+      logAudit(req, "Unmark Done", "Manage Slack Case", `Message: ${timestamp}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       if (err.data?.error === "no_reaction") {
@@ -1128,6 +1146,7 @@ export function setupSlackRoutes(app: Express) {
     if (!client) return;
     try {
       const { channelId, ts } = req.params;
+      const msgText = findMessageTextFromCache(channelId, ts);
       await client.chat.delete({
         channel: channelId,
         ts,
@@ -1144,7 +1163,7 @@ export function setupSlackRoutes(app: Express) {
       for (const key of Object.keys(replyCache)) {
         if (key.startsWith(channelId + ":")) delete replyCache[key];
       }
-      logAudit(req, "Delete Message", "Manage Slack Case", `Message: ${ts}, Channel: ${channelId}`);
+      logAudit(req, "Delete Message", "Manage Slack Case", `Message: ${ts}, Channel: ${channelId}` + (msgText ? `\n---MSG---\n${msgText}` : ""));
       return res.json({ ok: true });
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to delete message" });

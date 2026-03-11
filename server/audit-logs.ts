@@ -29,10 +29,13 @@ export function logAudit(req: Request, action: string, page: string, details?: s
   } catch {}
 }
 
-function parseSlackDetails(details: string): { ts: string; channelId: string } | null {
-  const msgMatch = details.match(/(?:Message|Thread):\s*([\d.]+),\s*Channel:\s*(\S+)/);
-  if (msgMatch) return { ts: msgMatch[1], channelId: msgMatch[2] };
-  return null;
+function parseSlackDetails(details: string): { ts: string; channelId: string; storedText: string; replyText: string } | null {
+  const firstLine = details.split("\n---MSG---\n")[0];
+  const msgMatch = firstLine.match(/(?:Message|Thread):\s*([\d.]+),\s*Channel:\s*(\S+)/);
+  if (!msgMatch) return null;
+  const storedText = details.includes("\n---MSG---\n") ? details.split("\n---MSG---\n")[1] : "";
+  const replyMatch = firstLine.match(/Reply:\s*(.+)$/);
+  return { ts: msgMatch[1], channelId: msgMatch[2].replace(/,.*$/, ""), storedText, replyText: replyMatch?.[1] || "" };
 }
 
 function parseCvReportId(details: string): number | null {
@@ -76,8 +79,20 @@ export function setupAuditLogRoutes(app: Express) {
         const parsed = parseSlackDetails(log.details || "");
         if (!parsed) return res.json({ type: "slack", data: null, message: "Could not parse message details" });
 
+        if (parsed.storedText) {
+          return res.json({
+            type: "slack",
+            data: {
+              text: parsed.storedText,
+              ts: parsed.ts,
+              channelId: parsed.channelId,
+              replyText: parsed.replyText || undefined,
+            },
+          });
+        }
+
         try {
-          const botToken = process.env.SLACK_BOT_TOKEN;
+          const botToken = await storage.getSetting("slack_bot_token");
           if (botToken) {
             const client = new WebClient(botToken);
             const result = await client.conversations.history({
