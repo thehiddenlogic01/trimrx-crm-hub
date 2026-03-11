@@ -79,17 +79,14 @@ export function setupAuditLogRoutes(app: Express) {
         const parsed = parseSlackDetails(log.details || "");
         if (!parsed) return res.json({ type: "slack", data: null, message: "Could not parse message details" });
 
-        if (parsed.storedText) {
-          return res.json({
-            type: "slack",
-            data: {
-              text: parsed.storedText,
-              ts: parsed.ts,
-              channelId: parsed.channelId,
-              replyText: parsed.replyText || undefined,
-            },
-          });
-        }
+        const baseData: any = {
+          ts: parsed.ts,
+          channelId: parsed.channelId,
+          replyText: parsed.replyText || undefined,
+          reactions: [] as { name: string; count: number; users: string[] }[],
+          replies: [] as { user: string; text: string; ts: string }[],
+          replyCount: 0,
+        };
 
         try {
           const botToken = await storage.getSetting("slack_bot_token");
@@ -103,12 +100,43 @@ export function setupAuditLogRoutes(app: Express) {
             });
             if (result.messages && result.messages.length > 0) {
               const msg = result.messages[0];
-              return res.json({ type: "slack", data: { text: msg.text || "", user: msg.user || "", ts: msg.ts, channelId: parsed.channelId } });
-            }
-          }
-        } catch {}
+              baseData.text = msg.text || parsed.storedText || "";
+              baseData.user = msg.user || "";
+              baseData.reactions = (msg.reactions || []).map((r: any) => ({ name: r.name, count: r.count, users: r.users || [] }));
+              baseData.replyCount = msg.reply_count || 0;
 
-        return res.json({ type: "slack", data: null, ts: parsed.ts, channelId: parsed.channelId, message: "Message not available (may have been deleted)" });
+              if (baseData.replyCount > 0) {
+                try {
+                  const repliesResult = await client.conversations.replies({
+                    channel: parsed.channelId,
+                    ts: parsed.ts,
+                    limit: 50,
+                  });
+                  if (repliesResult.messages && repliesResult.messages.length > 1) {
+                    baseData.replies = repliesResult.messages.slice(1).map((r: any) => ({
+                      user: r.user || "",
+                      text: r.text || "",
+                      ts: r.ts || "",
+                    }));
+                  }
+                } catch {}
+              }
+            } else {
+              baseData.text = parsed.storedText || "";
+            }
+          } else {
+            baseData.text = parsed.storedText || "";
+          }
+        } catch {
+          baseData.text = parsed.storedText || "";
+        }
+
+        if (!baseData.text && !parsed.storedText) {
+          return res.json({ type: "slack", data: null, ts: parsed.ts, channelId: parsed.channelId, message: "Message not available (may have been deleted)" });
+        }
+        if (!baseData.text) baseData.text = parsed.storedText;
+
+        return res.json({ type: "slack", data: baseData });
       }
 
       if (log.page === "CV Report") {

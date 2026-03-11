@@ -97,6 +97,11 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
 
   const renderSlackContent = (ctx: ContextData) => {
     if (ctx.data) {
+      const isDone = ctx.data.reactions?.some((r: any) => r.name === "white_check_mark" || r.name === "heavy_check_mark" || r.name === "ballot_box_with_check");
+      const reactions = ctx.data.reactions || [];
+      const replies = ctx.data.replies || [];
+      const replyCount = ctx.data.replyCount || 0;
+
       return (
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
@@ -105,17 +110,51 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
             <span>Timestamp: {ctx.data.ts}</span>
             {ctx.data.user && <><span>|</span><span>User: {ctx.data.user}</span></>}
           </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {isDone ? (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" data-testid="badge-done-status">✅ Done</Badge>
+            ) : (
+              <Badge variant="outline" className="text-muted-foreground" data-testid="badge-not-done-status">Not Done</Badge>
+            )}
+            {replyCount > 0 && (
+              <Badge variant="outline" className="text-blue-700 border-blue-300 dark:text-blue-300 dark:border-blue-700" data-testid="badge-reply-count">💬 {replyCount} {replyCount === 1 ? "reply" : "replies"}</Badge>
+            )}
+            {reactions.length > 0 && reactions.map((r: any, i: number) => (
+              <span key={i} className="inline-flex items-center gap-1 text-xs bg-muted rounded px-1.5 py-0.5">:{r.name}: × {r.count}</span>
+            ))}
+          </div>
+
           <div>
             <p className="text-xs font-semibold text-muted-foreground mb-1">Original Message:</p>
             <div className="bg-muted/50 rounded-lg p-4 border whitespace-pre-wrap text-sm leading-relaxed">
               {ctx.data.text || "(empty message)"}
             </div>
           </div>
+
           {ctx.data.replyText && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground mb-1">Reply Sent:</p>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Reply Sent (this action):</p>
               <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 border border-blue-200 dark:border-blue-800 whitespace-pre-wrap text-sm leading-relaxed">
                 {ctx.data.replyText}
+              </div>
+            </div>
+          )}
+
+          {replies.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Thread Replies ({replies.length}):</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {replies.map((r: any, i: number) => (
+                  <div key={i} className="bg-slate-50 dark:bg-slate-900/40 rounded-lg p-3 border text-sm" data-testid={`reply-item-${i}`}>
+                    <div className="flex items-center gap-2 mb-1 text-xs text-muted-foreground">
+                      <span className="font-medium">{r.user}</span>
+                      <span>·</span>
+                      <span>{new Date(parseFloat(r.ts) * 1000).toLocaleString()}</span>
+                    </div>
+                    <div className="whitespace-pre-wrap leading-relaxed">{r.text}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
