@@ -808,7 +808,7 @@ export default function SlackMessagesPage() {
       return res.json();
     },
     enabled: slackStatus?.connected === true,
-    refetchInterval: dateFilter ? false : 30000,
+    refetchInterval: 30000,
   });
 
   useEffect(() => {
