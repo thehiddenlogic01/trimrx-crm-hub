@@ -808,8 +808,27 @@ export default function SlackMessagesPage() {
       return res.json();
     },
     enabled: slackStatus?.connected === true,
-    refetchInterval: 30000,
+    refetchInterval: 60000,
   });
+
+  useEffect(() => {
+    const es = new EventSource("/api/slack/events");
+    es.onmessage = (ev) => {
+      try {
+        const event = JSON.parse(ev.data);
+        if (event.type === "connected") return;
+        if (event.channelId !== CHANNEL_ID) return;
+        if (event.type === "react" || event.type === "unreact" || event.type === "delete") {
+          queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "messages"] });
+        }
+        if (event.type === "reply" && event.threadTs) {
+          queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", event.threadTs] });
+          queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "messages"] });
+        }
+      } catch {}
+    };
+    return () => es.close();
+  }, []);
 
   useEffect(() => {
     if (!messages || messages.length === 0) return;
