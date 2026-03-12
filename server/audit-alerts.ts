@@ -287,21 +287,28 @@ export function setupAuditAlertRoutes(app: Express) {
       const username = (req.user as any).username || "Unknown";
       const now = new Date().toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 
-      let text = `<b>🆘 Need Help — TrimRX</b>\n`;
-      text += `<i>From: ${escapeHtml(username)} • ${now} ET</i>\n\n`;
-      text += `<b>📝 Note:</b>\n${escapeHtml(message.trim())}\n`;
+      let text = `🚨 <b>HELP REQUEST</b>\n`;
+      text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      text += `👤 <b>Requested by:</b> ${escapeHtml(username)}\n`;
+      text += `🕐 <b>Time:</b> ${now} ET\n\n`;
+      text += `💬 <b>Note:</b>\n`;
+      text += `<blockquote>${escapeHtml(message.trim())}</blockquote>\n`;
 
       if (slackContext) {
-        text += `\n━━━━━━━━━━━━━━━━━━\n`;
-        text += `<b>📨 Slack Message Details</b>\n`;
-        if (slackContext.user) text += `<b>Agent:</b> ${escapeHtml(slackContext.user)}\n`;
-        if (slackContext.caseId) text += `<b>Case ID:</b> ${escapeHtml(slackContext.caseId)}\n`;
-        if (slackContext.caseLink) text += `<b>Case Link:</b> ${escapeHtml(slackContext.caseLink)}\n`;
+        text += `\n📋 <b>CASE DETAILS</b>\n`;
+        text += `┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n`;
+        if (slackContext.user) text += `👨‍💼 <b>Agent:</b> ${escapeHtml(slackContext.user)}\n`;
+        if (slackContext.caseId) text += `🆔 <b>Case ID:</b> <code>${escapeHtml(slackContext.caseId)}</code>\n`;
+        if (slackContext.caseLink) text += `🔗 <b>Link:</b> <a href="${escapeHtml(slackContext.caseLink)}">Open Case</a>\n`;
         if (slackContext.messagePreview) {
           const preview = slackContext.messagePreview.substring(0, 300);
-          text += `\n<i>${escapeHtml(preview)}${slackContext.messagePreview.length > 300 ? "..." : ""}</i>\n`;
+          text += `\n📄 <b>Original Message:</b>\n`;
+          text += `<blockquote>${escapeHtml(preview)}${slackContext.messagePreview.length > 300 ? "..." : ""}</blockquote>\n`;
         }
       }
+
+      text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+      text += `<i>via TrimRX CRM</i>`;
 
       const result = await sendTelegramMessage(config.telegramBotToken, config.telegramChatId, text);
 
