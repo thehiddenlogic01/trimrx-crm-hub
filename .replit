@@ -46,3 +46,7 @@ expertMode = true
 
 [userenv.shared]
 CAREVALIDATE_GRAPHQL_URL = "https://api.care360-next.carevalidate.com/graphql/"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
