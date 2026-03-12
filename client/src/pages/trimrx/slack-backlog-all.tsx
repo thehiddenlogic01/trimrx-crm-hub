@@ -806,6 +806,14 @@ export default function SlackMessagesPage() {
       return next;
     });
   };
+  const [refundDataMap, _setRefundDataMap] = useState<Record<string, { found?: boolean; record?: Record<string, string>; headers?: string[]; message?: string; statusFromP?: string; reason?: string } | null>>(() => loadFromSession("sba_refundDataMap", {}));
+  const setRefundDataMap: typeof _setRefundDataMap = (v) => {
+    _setRefundDataMap((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      saveToSession("sba_refundDataMap", next);
+      return next;
+    });
+  };
   const [cvSyncLoading, setCvSyncLoading] = useState(false);
   const [cvSyncProgress, setCvSyncProgress] = useState({ done: 0, total: 0 });
   const [lastPulledTime, _setLastPulledTime] = useState<Date | null>(() => {
@@ -1458,11 +1466,25 @@ export default function SlackMessagesPage() {
       }
     })();
 
-    const [cvResult, paymentResult, trackerResult] = await Promise.all([cvPromise, paymentPromise, trackerPromise]);
+    const refundPromise = (async () => {
+      const queries: string[] = [];
+      if (extracted?.link) queries.push(extracted.link);
+      if (extracted?.caseId) queries.push(extracted.caseId);
+      if (queries.length === 0) return { found: false, reason: "no-query" };
+      try {
+        const res = await apiRequest("POST", "/api/pt-finder/refund-search", { queries });
+        return await res.json();
+      } catch {
+        return { found: false, reason: "error" };
+      }
+    })();
+
+    const [cvResult, paymentResult, trackerResult, refundResult] = await Promise.all([cvPromise, paymentPromise, trackerPromise, refundPromise]);
 
     setCvDataMap((prev) => ({ ...prev, [msg.ts]: cvResult }));
     setPaymentsMap((prev) => ({ ...prev, [msg.ts]: paymentResult }));
     setTrackerMatchMap((prev) => ({ ...prev, [msg.ts]: trackerResult }));
+    setRefundDataMap((prev) => ({ ...prev, [msg.ts]: refundResult }));
     const now = new Date();
     setLastPulledTime(now);
     setLastPulledPerMsg((prev) => ({ ...prev, [msg.ts]: now }));
@@ -2012,6 +2034,7 @@ export default function SlackMessagesPage() {
               onToggleSelect={() => toggleSelectMessage(msg.ts)}
               paymentData={paymentsMap[msg.ts]}
               cvData={cvDataMap[msg.ts]}
+              refundData={refundDataMap[msg.ts]}
               lastPulledTime={lastPulledPerMsg[msg.ts] || lastPulledTime}
               onPullSingle={handlePullSingle}
             />
@@ -2324,6 +2347,7 @@ function MessageCard({
   onToggleSelect,
   paymentData,
   cvData,
+  refundData,
   lastPulledTime,
   onPullSingle,
   expandIndex = 0,
@@ -2353,6 +2377,7 @@ function MessageCard({
   onToggleSelect?: () => void;
   paymentData?: { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string };
   cvData?: { name?: string; email?: string; status?: string; found?: boolean; error?: string };
+  refundData?: { found?: boolean; record?: Record<string, string>; headers?: string[]; message?: string; statusFromP?: string; reason?: string } | null;
   lastPulledTime?: Date | null;
   onPullSingle?: (msg: SlackMessage) => Promise<void>;
 }) {
@@ -2810,6 +2835,27 @@ function MessageCard({
                     {getTrackerField(trackerMatch, "TrimRx Agent Notes", "trimrx_agent_notes")}
                   </div>
                 )}
+              </div>
+              <div className="flex justify-between gap-1 items-start">
+                <span className="text-muted-foreground whitespace-nowrap">Refund Status</span>
+                <span className="font-medium text-right truncate max-w-[180px]" data-testid={`tracker-refund-${msg.ts}`}>
+                  {refundData === undefined ? (
+                    <span className="text-foreground">—</span>
+                  ) : refundData === null || (!refundData.found && !refundData.reason) ? (
+                    <span className="text-foreground">—</span>
+                  ) : refundData.found ? (
+                    <span className="flex flex-col items-end gap-0.5">
+                      <span className="font-bold text-blue-600 dark:text-blue-400">Refund case found</span>
+                      {refundData.statusFromP ? (
+                        <span className="text-[10px] text-muted-foreground">{refundData.statusFromP}</span>
+                      ) : (
+                        <span className="text-[10px] text-amber-500 italic">not updated yet</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="font-bold text-red-600 dark:text-red-400">Refund not submitted</span>
+                  )}
+                </span>
               </div>
             </div>
           </div>

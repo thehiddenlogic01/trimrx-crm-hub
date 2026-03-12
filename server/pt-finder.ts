@@ -201,6 +201,64 @@ export function setupPtFinderRoutes(app: Express) {
     }
   });
 
+  app.post("/api/pt-finder/refund-search", async (req: Request, res: Response) => {
+    try {
+      const { queries } = req.body;
+      if (!Array.isArray(queries) || queries.length === 0) {
+        return res.status(400).json({ error: "queries array is required" });
+      }
+
+      const config = await getPtFinderConfig();
+      if (!config.credentials || !config.spreadsheetId) {
+        return res.json({ found: false, message: "PT Finder is not configured" });
+      }
+      if (!config.refundsSheetName) {
+        return res.json({ found: false, message: "No refunds sheet configured" });
+      }
+
+      const sheets = getSheetsClient(config.credentials);
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: config.spreadsheetId,
+        range: config.refundsSheetName,
+      });
+
+      const allRows = response.data.values || [];
+      if (allRows.length < config.refundsHeaderRow) {
+        return res.json({ found: false });
+      }
+
+      const rawHeaders = allRows[config.refundsHeaderRow - 1] || [];
+      const headers = rawHeaders.map((h: string) => h.trim());
+      const dataRows = allRows.slice(config.refundsHeaderRow);
+
+      const colPIndex = 15;
+      const statusColumnHeader = headers[colPIndex] || null;
+
+      for (const q of queries) {
+        const qLower = String(q).toLowerCase().trim();
+        if (!qLower) continue;
+
+        const match = dataRows.find((row: string[]) => {
+          const rowText = row.join(" ").toLowerCase();
+          return rowText.includes(qLower);
+        });
+
+        if (match) {
+          const record: Record<string, string> = {};
+          headers.forEach((header: string, idx: number) => {
+            record[header] = match[idx] || "";
+          });
+          const statusFromP = (match[colPIndex] || "").trim();
+          return res.json({ found: true, record, headers, statusFromP, statusColumnHeader });
+        }
+      }
+
+      res.json({ found: false });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/pt-finder/batch-search", async (req: Request, res: Response) => {
     try {
       const { queries } = req.body;
