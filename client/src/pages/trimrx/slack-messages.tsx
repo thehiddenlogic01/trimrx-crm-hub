@@ -1402,16 +1402,18 @@ export default function SlackMessagesPage() {
               Check CV Status
             </Button>
           )}
-          <Button
-            variant={Object.keys(trackerMatchMap).length > 0 ? "default" : "outline"}
-            size="sm"
-            onClick={matchTrackerData}
-            disabled={trackerMatchLoading || !messages || messages.length === 0}
-            data-testid="button-match-data"
-          >
-            {trackerMatchLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Database className="h-4 w-4 mr-1.5" />}
-            Match Data
-          </Button>
+          {can("slack-messages", "top-toolbar-tools") && (
+            <Button
+              variant={Object.keys(trackerMatchMap).length > 0 ? "default" : "outline"}
+              size="sm"
+              onClick={matchTrackerData}
+              disabled={trackerMatchLoading || !messages || messages.length === 0}
+              data-testid="button-match-data"
+            >
+              {trackerMatchLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Database className="h-4 w-4 mr-1.5" />}
+              Match Data
+            </Button>
+          )}
           {Object.keys(cvStatusMap).length > 0 && (
             <>
               <Select value={cvFilter} onValueChange={setCvFilter}>

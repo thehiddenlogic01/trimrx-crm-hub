@@ -1833,63 +1833,67 @@ export default function SlackMessagesPage() {
           {can("slack-backlog-all", "send-to-cv") && filteredMessages.length > 0 && (
             <SendToCvReportDialog messages={filteredMessages} dateFilter={dateFilter} />
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="button-check-all-payments"
-            onClick={handleCheckAllPayments}
-            disabled={paymentsLoading}
-          >
-            {paymentsLoading ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                Checking... ({paymentsProgress.done}/{paymentsProgress.total})
-              </>
-            ) : (
-              <>
-                <CreditCard className="h-3.5 w-3.5 mr-1" />
-                Check all Payments
-              </>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="button-sync-data-cv"
-            onClick={handleSyncDataCv}
-            disabled={cvSyncLoading}
-          >
-            {cvSyncLoading ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                Syncing... ({cvSyncProgress.done}/{cvSyncProgress.total})
-              </>
-            ) : (
-              <>
-                <Database className="h-3.5 w-3.5 mr-1" />
-                Sync Data CV
-              </>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="button-tracker-data-sync"
-            onClick={matchTrackerData}
-            disabled={trackerMatchLoading}
-          >
-            {trackerMatchLoading ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                Syncing...
-              </>
-            ) : (
-              <>
-                <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
-                Tracker Data Sync
-              </>
-            )}
-          </Button>
+          {can("slack-backlog-all", "top-toolbar-tools") && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="button-check-all-payments"
+                onClick={handleCheckAllPayments}
+                disabled={paymentsLoading}
+              >
+                {paymentsLoading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    Checking... ({paymentsProgress.done}/{paymentsProgress.total})
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="h-3.5 w-3.5 mr-1" />
+                    Check all Payments
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="button-sync-data-cv"
+                onClick={handleSyncDataCv}
+                disabled={cvSyncLoading}
+              >
+                {cvSyncLoading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    Syncing... ({cvSyncProgress.done}/{cvSyncProgress.total})
+                  </>
+                ) : (
+                  <>
+                    <Database className="h-3.5 w-3.5 mr-1" />
+                    Sync Data CV
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="button-tracker-data-sync"
+                onClick={matchTrackerData}
+                disabled={trackerMatchLoading}
+              >
+                {trackerMatchLoading ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
+                    Tracker Data Sync
+                  </>
+                )}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -2635,6 +2639,7 @@ function MessageCard({
         </div>
         </div>
 
+        {can("slack-backlog-all", "right-panel") && (
         <div className="w-[280px] flex-shrink-0 border-l pl-3 space-y-3">
           {lastPulledTime && (
             <div className="flex items-center justify-between gap-1 pb-1 border-b">
@@ -2740,6 +2745,7 @@ function MessageCard({
             </div>
           </div>
         </div>
+        )}
         </div>
 
         <div className="flex items-center gap-2 pt-1 border-t">

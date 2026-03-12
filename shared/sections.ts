@@ -110,6 +110,7 @@ export const APP_FEATURES: PageFeatures[] = [
       { key: "check-cv-status", label: "Check CV Status" },
       { key: "bulk-done", label: "Bulk Mark Done" },
       { key: "reply-filter", label: "Reply Filter (All Replies dropdown)" },
+      { key: "top-toolbar-tools", label: "Top Toolbar Tools (Match Data)" },
     ],
   },
   {
@@ -125,6 +126,8 @@ export const APP_FEATURES: PageFeatures[] = [
       { key: "check-cv-status", label: "Check CV Status" },
       { key: "bulk-done", label: "Bulk Mark Done" },
       { key: "reply-filter", label: "Reply Filter (All Replies dropdown)" },
+      { key: "right-panel", label: "Right Side Card View (CV / Payments / Tracker)" },
+      { key: "top-toolbar-tools", label: "Top Toolbar Tools (Check all Payments, Sync Data CV, Tracker Data Sync)" },
     ],
   },
   {
