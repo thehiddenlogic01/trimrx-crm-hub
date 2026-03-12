@@ -745,7 +745,7 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
     if (s === "succeeded") return "text-green-700 bg-green-100 dark:bg-green-900 dark:text-green-300";
     if (s === "canceled" || s === "failed") return "text-red-700 bg-red-100 dark:bg-red-900 dark:text-red-300";
     if (s === "requires_payment_method" || s === "requires_action") return "text-yellow-700 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-300";
-    return "text-gray-700 bg-gray-100";
+    return "text-foreground bg-muted";
   };
 
   return (

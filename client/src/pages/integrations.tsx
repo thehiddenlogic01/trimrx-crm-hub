@@ -154,7 +154,7 @@ function SlackSection() {
           <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
         </Badge>
       ) : (
-        <Badge variant="secondary" className="bg-gray-100 text-gray-600" data-testid="badge-slack-status">Not Connected</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground" data-testid="badge-slack-status">Not Connected</Badge>
       )}
     >
       <div className="space-y-4">
@@ -288,7 +288,7 @@ function StripeSection() {
           <CheckCircle2 className="h-3 w-3 mr-1" /> Connected ({source === "integration" ? "Replit" : "API Key"})
         </Badge>
       ) : (
-        <Badge variant="secondary" className="bg-gray-100 text-gray-600" data-testid="badge-stripe-status">Not Connected</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground" data-testid="badge-stripe-status">Not Connected</Badge>
       )}
     >
       <div className="space-y-3">
@@ -406,7 +406,7 @@ function GoogleSheetsSection() {
           <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
         </Badge>
       ) : (
-        <Badge variant="secondary" className="bg-gray-100 text-gray-600" data-testid="badge-gsheets-status">Not Configured</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground" data-testid="badge-gsheets-status">Not Configured</Badge>
       )}
     >
       <div className="space-y-4">
@@ -557,7 +557,7 @@ function PtFinderSection() {
           <CheckCircle2 className="h-3 w-3 mr-1" /> Connected
         </Badge>
       ) : (
-        <Badge variant="secondary" className="bg-gray-100 text-gray-600" data-testid="badge-ptfinder-status">Not Configured</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground" data-testid="badge-ptfinder-status">Not Configured</Badge>
       )}
     >
       <div className="space-y-4">
@@ -706,7 +706,7 @@ function CareValidateSection() {
           <CheckCircle2 className="h-3 w-3 mr-1" /> Token Set
         </Badge>
       ) : (
-        <Badge variant="secondary" className="bg-gray-100 text-gray-600" data-testid="badge-cv-status">No Token</Badge>
+        <Badge variant="secondary" className="bg-muted text-muted-foreground" data-testid="badge-cv-status">No Token</Badge>
       )}
     >
       <div className="space-y-3">

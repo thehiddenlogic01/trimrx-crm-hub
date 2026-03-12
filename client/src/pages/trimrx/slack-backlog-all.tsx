@@ -704,7 +704,7 @@ function PIActivityIcon({ icon, type }: { icon: string; type: string }) {
   const size = "h-3.5 w-3.5";
   if (type === "succeeded") return <CheckCircle2 className={`${size} text-green-600`} />;
   if (type === "failed" || type === "error") return <XCircle className={`${size} text-red-500`} />;
-  if (type === "canceled") return <XCircle className={`${size} text-gray-500`} />;
+  if (type === "canceled") return <XCircle className={`${size} text-muted-foreground`} />;
   if (icon === "alert" || type === "requires_action") return <AlertTriangle className={`${size} text-yellow-500`} />;
   if (type === "refunded") return <RefreshCw className={`${size} text-blue-500`} />;
   if (type === "disputed") return <AlertCircle className={`${size} text-amber-500`} />;
@@ -1974,7 +1974,7 @@ export default function SlackMessagesPage() {
                   type="checkbox"
                   checked={filteredMessages.length > 0 && filteredMessages.every((m) => selectedMessages.has(m.ts))}
                   onChange={() => toggleSelectAll(filteredMessages)}
-                  className="h-4 w-4 rounded border-gray-300 accent-primary"
+                  className="h-4 w-4 rounded border-border accent-primary"
                 />
                 Select All ({selectedMessages.size}/{filteredMessages.length})
               </label>
@@ -2644,7 +2644,7 @@ function MessageCard({
               type="checkbox"
               checked={!!isSelected}
               onChange={onToggleSelect}
-              className="h-4 w-4 mt-2 rounded border-gray-300 accent-primary cursor-pointer flex-shrink-0"
+              className="h-4 w-4 mt-2 rounded border-border accent-primary cursor-pointer flex-shrink-0"
               data-testid={`checkbox-msg-${msg.ts}`}
             />
           )}

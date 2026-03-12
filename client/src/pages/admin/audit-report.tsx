@@ -653,7 +653,7 @@ export default function AuditReportPage() {
                           type="checkbox"
                           checked={auditData.logs.length > 0 && selectedIds.size === auditData.logs.length}
                           onChange={toggleSelectAll}
-                          className="rounded border-gray-300"
+                          className="rounded border-border"
                           data-testid="checkbox-select-all"
                         />
                       </th>
@@ -673,7 +673,7 @@ export default function AuditReportPage() {
                             type="checkbox"
                             checked={selectedIds.has(log.id)}
                             onChange={() => toggleSelect(log.id)}
-                            className="rounded border-gray-300"
+                            className="rounded border-border"
                             data-testid={`checkbox-select-${log.id}`}
                           />
                         </td>
@@ -684,7 +684,7 @@ export default function AuditReportPage() {
                           <span className="font-medium text-sm">{log.username}</span>
                         </td>
                         <td className="p-3" data-testid={`text-action-${log.id}`}>
-                          <Badge variant="secondary" className={`text-xs font-medium ${ACTION_COLORS[log.action] || "bg-gray-100 text-gray-800"}`}>
+                          <Badge variant="secondary" className={`text-xs font-medium ${ACTION_COLORS[log.action] || "bg-muted text-foreground"}`}>
                             {log.action}
                           </Badge>
                         </td>

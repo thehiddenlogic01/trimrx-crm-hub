@@ -159,10 +159,10 @@ function AppLayout() {
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center gap-2 p-2 border-b h-12">
+          <header className="flex items-center gap-2 px-3 sm:px-4 border-b h-12 bg-background/80 backdrop-blur-sm sticky top-0 z-10">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </header>
-          <main className="flex-1 overflow-auto p-6">
+          <main className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
             <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <PageWrapper>

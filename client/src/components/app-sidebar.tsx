@@ -14,7 +14,6 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Settings,
   Zap,
@@ -189,12 +188,12 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-md bg-primary flex items-center justify-center shrink-0">
+          <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center shrink-0 shadow-sm shadow-primary/25">
             <span className="text-primary-foreground font-bold text-sm">T</span>
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="font-semibold text-sm text-sidebar-foreground truncate">TrimRX</span>
-            <span className="text-xs text-muted-foreground truncate">Workspace</span>
+            <span className="font-bold text-sm text-sidebar-foreground truncate tracking-tight">TrimRX</span>
+            <span className="text-[11px] text-muted-foreground truncate">CRM Workspace</span>
           </div>
         </div>
       </SidebarHeader>
@@ -241,20 +240,20 @@ export function AppSidebar() {
       <SidebarSeparator />
 
       <SidebarFooter className="p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <span className="text-xs font-semibold text-primary">
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-sidebar-accent/50 p-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-8 w-8 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+              <span className="text-xs font-bold text-primary">
                 {user?.username?.charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex flex-col min-w-0">
-              <span data-testid="text-username" className="text-sm text-sidebar-foreground truncate">
+              <span data-testid="text-username" className="text-sm font-medium text-sidebar-foreground truncate">
                 {user?.username}
               </span>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 w-fit">
+              <span className="text-[10px] text-muted-foreground">
                 {role === "admin" ? "Admin" : role === "viewer" ? "Viewer" : "Manager"}
-              </Badge>
+              </span>
             </div>
           </div>
           <Button
@@ -262,7 +261,7 @@ export function AppSidebar() {
             variant="ghost"
             size="icon"
             onClick={logout}
-            className="shrink-0"
+            className="shrink-0 h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
           >
             <LogOut className="h-4 w-4" />
           </Button>

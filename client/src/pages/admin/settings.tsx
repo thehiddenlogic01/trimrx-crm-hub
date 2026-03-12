@@ -20,14 +20,14 @@ const REASON_COLORS: Record<string, string> = {
   "Clinical & Health": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
   "Logistics & Supply": "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
   "Support & UX": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  "Uncategorized": "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+  "Uncategorized": "bg-muted text-foreground dark:bg-muted dark:text-foreground",
   "Not for Retention": "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
 const CLASSIFICATION_DATA = {
   reasons: Object.entries(REASON_SUBREASON_MAP).map(([name, subReasons]) => ({
     name,
-    color: REASON_COLORS[name] || "bg-gray-100 text-gray-800",
+    color: REASON_COLORS[name] || "bg-muted text-foreground",
     subReasons,
   })),
   productTypes: [

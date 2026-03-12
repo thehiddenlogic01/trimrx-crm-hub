@@ -157,7 +157,7 @@ interface ChargeDetails {
 const DISPUTE_STATUS_MAP: Record<string, { label: string; color: string }> = {
   "warning_needs_response": { label: "Needs Response", color: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" },
   "warning_under_review": { label: "Under Review", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300" },
-  "warning_closed": { label: "Warning Closed", color: "bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300" },
+  "warning_closed": { label: "Warning Closed", color: "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground" },
   "needs_response": { label: "Needs Response", color: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" },
   "under_review": { label: "Under Review", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300" },
   "won": { label: "Won", color: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" },
@@ -315,7 +315,7 @@ function ChargeDetailView({ details, onBack }: { details: ChargeDetails; onBack:
                     <p className="text-xs text-muted-foreground">{formatDate(details.paymentIntent.created)}</p>
                   </div>
                   <div className="relative pb-2">
-                    <div className="absolute left-[-16px] top-1.5 w-3 h-3 rounded-full bg-gray-400 ring-4 ring-background" />
+                    <div className="absolute left-[-16px] top-1.5 w-3 h-3 rounded-full bg-muted-foreground/50 ring-4 ring-background" />
                     <p className="text-sm font-medium">Payment started</p>
                     <p className="text-xs text-muted-foreground">{formatDate(details.paymentIntent.created)}</p>
                   </div>
