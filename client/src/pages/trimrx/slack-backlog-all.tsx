@@ -746,13 +746,28 @@ function PIActivityInline({ piId }: { piId: string }) {
   );
 }
 
-function NeedHelpButton() {
+function NeedHelpButton({ msg, getUserName }: { msg: any; getUserName: (id: string) => string }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [helpMsg, setHelpMsg] = useState("");
+
+  const caseIdMatch = msg.text?.match(/Case\s*ID[:\s]*\*?([A-Z0-9-]+)\*?/i);
+  const caseId = caseIdMatch ? caseIdMatch[1] : null;
+  const linkMatch = msg.text?.match(/(https?:\/\/[^\s>]+)/);
+  const caseLink = linkMatch ? linkMatch[1] : null;
+
   const sendHelp = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/audit-alerts/send-custom", { message: helpMsg.trim() });
+      const msgText = (msg.text || "").replace(/<[^>]*>/g, "").substring(0, 500);
+      await apiRequest("POST", "/api/audit-alerts/send-custom", {
+        message: helpMsg.trim(),
+        slackContext: {
+          user: getUserName(msg.user),
+          caseId: caseId || undefined,
+          caseLink: caseLink || undefined,
+          messagePreview: msgText,
+        },
+      });
     },
     onSuccess: () => {
       toast({ title: "Help message sent to Telegram!" });
@@ -765,8 +780,8 @@ function NeedHelpButton() {
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setHelpMsg(""); }}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" data-testid="button-need-help">
-          <HelpCircle className="h-3.5 w-3.5 mr-1" />
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1" data-testid={`button-need-help-${msg.ts}`}>
+          <HelpCircle className="h-3.5 w-3.5" />
           Need Help
         </Button>
       </DialogTrigger>
@@ -778,14 +793,17 @@ function NeedHelpButton() {
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Write your message below. It will be sent to the Telegram group so the team can assist you.
-          </p>
+          <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
+            <p className="text-muted-foreground font-medium">This message will be included:</p>
+            <p><span className="font-medium">From:</span> {getUserName(msg.user)}</p>
+            {caseId && <p><span className="font-medium">Case ID:</span> {caseId}</p>}
+            {caseLink && <p className="truncate"><span className="font-medium">Link:</span> {caseLink}</p>}
+          </div>
           <Textarea
-            placeholder="Describe what you need help with..."
+            placeholder="Add your note — what do you need help with?"
             value={helpMsg}
             onChange={(e) => setHelpMsg(e.target.value)}
-            rows={5}
+            rows={4}
             data-testid="input-help-message"
           />
           <div className="flex justify-end gap-2">
@@ -2030,7 +2048,6 @@ export default function SlackMessagesPage() {
               </Button>
             </>
           )}
-          <NeedHelpButton />
         </div>
       </div>
 
@@ -2621,34 +2638,37 @@ function MessageCard({
             </div>
           )}
           <div className="flex-1 min-w-0 relative">
-            {can("slack-backlog-all", "send-to-cv") && !cvSent && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={sendSingleToCv}
-                disabled={sendingCv}
-                className="absolute top-0 right-0 h-8 text-xs gap-1"
-                data-testid={`button-send-single-cv-${msg.ts}`}
-              >
-                {sendingCv ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                )}
-                {sendingCv ? "Sending..." : "Send to CV"}
-              </Button>
-            )}
-            {cvSent && (
-              <Badge
-                variant="secondary"
-                className="absolute top-0 right-0 text-xs gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                data-testid={`badge-cv-sent-${msg.ts}`}
-              >
-                <CheckCircle className="h-3 w-3" />
-                Sent to CV
-              </Badge>
-            )}
-            <div className="flex items-center gap-2 flex-wrap pr-24">
+            <div className="absolute top-0 right-0 flex items-center gap-1.5">
+              {can("slack-backlog-all", "send-to-cv") && !cvSent && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={sendSingleToCv}
+                  disabled={sendingCv}
+                  className="h-8 text-xs gap-1"
+                  data-testid={`button-send-single-cv-${msg.ts}`}
+                >
+                  {sendingCv ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                  )}
+                  {sendingCv ? "Sending..." : "Send to CV"}
+                </Button>
+              )}
+              {cvSent && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                  data-testid={`badge-cv-sent-${msg.ts}`}
+                >
+                  <CheckCircle className="h-3 w-3" />
+                  Sent to CV
+                </Badge>
+              )}
+              <NeedHelpButton msg={msg} getUserName={getUserName} />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap pr-48">
               <span className="font-semibold text-sm" data-testid={`text-user-${msg.ts}`}>{getUserName(msg.user)}</span>
               <span className="text-xs text-muted-foreground">{formatTs(msg.ts)}</span>
               {isReply && <Badge variant="outline" className="text-xs gap-1 border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400"><CornerDownRight className="h-3 w-3" /> Reply</Badge>}

@@ -279,7 +279,7 @@ export function setupAuditAlertRoutes(app: Express) {
         return res.status(400).json({ error: "Telegram bot is not configured. Ask an admin to set it up in Alerts settings." });
       }
 
-      const { message } = req.body;
+      const { message, slackContext } = req.body;
       if (!message || !message.trim()) {
         return res.status(400).json({ error: "Message cannot be empty" });
       }
@@ -290,6 +290,18 @@ export function setupAuditAlertRoutes(app: Express) {
       let text = `<b>🆘 Need Help — TrimRX</b>\n`;
       text += `<i>From: ${escapeHtml(username)} • ${now} ET</i>\n\n`;
       text += `<b>📝 Note:</b>\n${escapeHtml(message.trim())}\n`;
+
+      if (slackContext) {
+        text += `\n━━━━━━━━━━━━━━━━━━\n`;
+        text += `<b>📨 Slack Message Details</b>\n`;
+        if (slackContext.user) text += `<b>Agent:</b> ${escapeHtml(slackContext.user)}\n`;
+        if (slackContext.caseId) text += `<b>Case ID:</b> ${escapeHtml(slackContext.caseId)}\n`;
+        if (slackContext.caseLink) text += `<b>Case Link:</b> ${escapeHtml(slackContext.caseLink)}\n`;
+        if (slackContext.messagePreview) {
+          const preview = slackContext.messagePreview.substring(0, 300);
+          text += `\n<i>${escapeHtml(preview)}${slackContext.messagePreview.length > 300 ? "..." : ""}</i>\n`;
+        }
+      }
 
       const result = await sendTelegramMessage(config.telegramBotToken, config.telegramChatId, text);
 
