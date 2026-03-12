@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
+import { StripeStatusBadge } from "@/lib/stripe-status";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -1691,12 +1692,6 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
     }
   };
 
-  const statusColor = (s: string) => {
-    if (s === "succeeded") return "text-green-700 bg-green-100 dark:bg-green-900 dark:text-green-300";
-    if (s === "canceled" || s === "failed") return "text-red-700 bg-red-100 dark:bg-red-900 dark:text-red-300";
-    if (s === "requires_payment_method" || s === "requires_action") return "text-yellow-700 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-300";
-    return "text-gray-700 bg-gray-100";
-  };
 
   return (
     <>
@@ -1766,7 +1761,7 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                         {data.subscriptions.map((sub: any) => (
                           <div key={sub.id} className="border rounded-lg p-3 text-sm">
                             <div className="flex items-center justify-between">
-                              <Badge className={statusColor(sub.status)}>{sub.status}</Badge>
+                              <StripeStatusBadge status={sub.status} />
                               <span className="text-xs text-muted-foreground">
                                 {new Date(sub.created).toLocaleDateString()}
                               </span>
@@ -1808,10 +1803,7 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                                   ${pi.amount.toFixed(2)} {pi.currency}
                                 </td>
                                 <td className="p-2">
-                                  <Badge variant="outline" className={statusColor(pi.status)}>
-                                    {pi.status === "succeeded" && "✓ "}
-                                    {pi.status}
-                                  </Badge>
+                                  <StripeStatusBadge status={pi.status} />
                                 </td>
                                 <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
                                   {pi.description || "—"}

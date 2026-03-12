@@ -10,16 +10,14 @@ import {
   Search,
   CreditCard,
   Loader2,
-  CheckCircle2,
-  XCircle,
   User,
   DollarSign,
   RefreshCw,
   ExternalLink,
   AlertCircle,
   ArrowDownCircle,
-  Clock,
 } from "lucide-react";
+import { StripeStatusBadge } from "@/lib/stripe-status";
 
 interface Customer {
   id: string;
@@ -118,32 +116,6 @@ function formatDateTime(ts: number) {
   });
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    succeeded: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    paid: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    active: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    failed: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-    canceled: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-    pending: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-    incomplete: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-    trialing: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    past_due: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-    unpaid: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-  };
-  const icon = status === "succeeded" || status === "paid" || status === "active"
-    ? <CheckCircle2 className="h-3 w-3" />
-    : status === "failed" || status === "canceled"
-    ? <XCircle className="h-3 w-3" />
-    : <Clock className="h-3 w-3" />;
-
-  return (
-    <Badge variant="secondary" className={`text-xs gap-1 ${colors[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"}`} data-testid={`badge-status-${status}`}>
-      {icon}
-      {status.charAt(0).toUpperCase() + status.slice(1).replace("_", " ")}
-    </Badge>
-  );
-}
 
 export default function StripePaymentsPage() {
   const { toast } = useToast();
@@ -315,7 +287,7 @@ export default function StripePaymentsPage() {
                                 <div key={sub.id} className="p-2.5 rounded-md border bg-muted/20 space-y-1" data-testid={`card-subscription-${sub.id}`}>
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <StatusBadge status={sub.status} />
+                                      <StripeStatusBadge status={sub.status} />
                                       <span className="text-[10px] text-muted-foreground font-mono">{sub.id}</span>
                                     </div>
                                     <span className="text-[10px] text-muted-foreground">{formatDate(sub.created)}</span>
@@ -361,7 +333,7 @@ export default function StripePaymentsPage() {
                                           <span className="font-medium">${pi.amount.toFixed(2)}</span>
                                           <span className="text-muted-foreground ml-0.5">{pi.currency}</span>
                                         </td>
-                                        <td className="px-2.5 py-1.5"><StatusBadge status={pi.status} /></td>
+                                        <td className="px-2.5 py-1.5"><StripeStatusBadge status={pi.status} /></td>
                                         <td className="px-2.5 py-1.5 text-muted-foreground max-w-[150px] truncate">{pi.description || "—"}</td>
                                         <td className="px-2.5 py-1.5 text-muted-foreground font-mono text-[10px]">{pi.id.slice(0, 20)}...</td>
                                       </tr>
@@ -403,7 +375,12 @@ export default function StripePaymentsPage() {
                                             <span className="text-red-500 ml-1">(−${payment.refundAmount.toFixed(2)})</span>
                                           )}
                                         </td>
-                                        <td className="px-2.5 py-1.5"><StatusBadge status={payment.status} /></td>
+                                        <td className="px-2.5 py-1.5">
+                                          <div className="flex flex-wrap gap-1">
+                                            <StripeStatusBadge status={payment.status} />
+                                            {payment.disputed && <StripeStatusBadge status="disputed" />}
+                                          </div>
+                                        </td>
                                         <td className="px-2.5 py-1.5 text-muted-foreground max-w-[150px] truncate">{payment.description || "—"}</td>
                                         <td className="px-2.5 py-1.5 text-muted-foreground capitalize">{payment.paymentMethod}</td>
                                         <td className="px-2.5 py-1.5">
@@ -446,7 +423,7 @@ export default function StripePaymentsPage() {
                                         <td className="px-2.5 py-1.5 text-muted-foreground font-mono">{inv.number || "—"}</td>
                                         <td className="px-2.5 py-1.5 whitespace-nowrap font-medium">${inv.amountDue.toFixed(2)} {inv.currency}</td>
                                         <td className="px-2.5 py-1.5 whitespace-nowrap text-green-600 dark:text-green-400 font-medium">${inv.amountPaid.toFixed(2)}</td>
-                                        <td className="px-2.5 py-1.5"><StatusBadge status={inv.status} /></td>
+                                        <td className="px-2.5 py-1.5"><StripeStatusBadge status={inv.status} /></td>
                                         <td className="px-2.5 py-1.5 flex gap-1">
                                           {inv.hostedUrl && (
                                             <a href={inv.hostedUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" title="View Invoice" data-testid={`link-invoice-${inv.id}`}>

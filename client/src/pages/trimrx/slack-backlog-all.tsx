@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
+import { StripeStatusBadge } from "@/lib/stripe-status";
 import checkColorfulImg from "@assets/image_1773174563337.png";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -2095,12 +2096,6 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
     }
   };
 
-  const statusColor = (s: string) => {
-    if (s === "succeeded") return "text-green-700 bg-green-100 dark:bg-green-900 dark:text-green-300";
-    if (s === "canceled" || s === "failed") return "text-red-700 bg-red-100 dark:bg-red-900 dark:text-red-300";
-    if (s === "requires_payment_method" || s === "requires_action") return "text-yellow-700 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-300";
-    return "text-gray-700 bg-gray-100";
-  };
 
   return (
     <>
@@ -2170,7 +2165,7 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                         {data.subscriptions.map((sub: any) => (
                           <div key={sub.id} className="border rounded-lg p-3 text-sm">
                             <div className="flex items-center justify-between">
-                              <Badge className={statusColor(sub.status)}>{sub.status}</Badge>
+                              <StripeStatusBadge status={sub.status} />
                               <span className="text-xs text-muted-foreground">
                                 {new Date(sub.created).toLocaleDateString()}
                               </span>
@@ -2212,10 +2207,7 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                                   ${pi.amount.toFixed(2)} {pi.currency}
                                 </td>
                                 <td className="p-2">
-                                  <Badge variant="outline" className={statusColor(pi.status)}>
-                                    {pi.status === "succeeded" && "✓ "}
-                                    {pi.status}
-                                  </Badge>
+                                  <StripeStatusBadge status={pi.status} />
                                 </td>
                                 <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
                                   {pi.description || "—"}
@@ -2696,11 +2688,9 @@ function MessageCard({
                   <div className="space-y-1" data-testid={`payments-intents-${msg.ts}`}>
                     {paymentData.paymentIntents.map((pi: any, idx: number) => (
                       <div key={pi.id || idx} className="border rounded px-2 py-1 bg-muted/30">
-                        <div className="flex justify-between items-center">
+                        <div className="flex justify-between items-center gap-1">
                           <span className="font-medium">${pi.amount?.toFixed(2)} {pi.currency}</span>
-                          <span className={`text-[10px] px-1 py-0.5 rounded ${pi.status === "succeeded" ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : pi.status === "canceled" || pi.status === "failed" ? "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300" : "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300"}`}>
-                            {pi.status === "succeeded" && "✓ "}{pi.status}
-                          </span>
+                          <StripeStatusBadge status={pi.status} size="xs" />
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">
                           {new Date(pi.created).toLocaleDateString()} — {pi.description || "—"}
