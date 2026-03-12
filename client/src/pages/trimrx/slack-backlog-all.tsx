@@ -780,7 +780,7 @@ function NeedHelpButton({ msg, getUserName }: { msg: any; getUserName: (id: stri
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setHelpMsg(""); }}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 text-xs gap-1" data-testid={`button-need-help-${msg.ts}`}>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1 bg-red-50 border-red-200 text-red-600 hover:bg-red-100 dark:bg-red-950 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900" data-testid={`button-need-help-${msg.ts}`}>
           <HelpCircle className="h-3.5 w-3.5" />
           Need Help
         </Button>

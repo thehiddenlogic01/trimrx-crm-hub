@@ -39,6 +39,7 @@ import {
   XOctagon,
   CreditCard,
   DollarSign,
+  HelpCircle,
 } from "lucide-react";
 
 const CHANNEL_ID = "C09KBS41YHH";
@@ -658,6 +659,104 @@ function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage
               </div>
             </div>
           )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NeedHelpButton({ msg, getUserName }: { msg: any; getUserName: (id: string) => string }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [helpMsg, setHelpMsg] = useState("");
+
+  const caseIdMatch = msg.text?.match(/Case\s*ID[:\s]*\*?([A-Z0-9-]+)\*?/i);
+  const caseId = caseIdMatch ? caseIdMatch[1] : null;
+  const linkMatch = msg.text?.match(/(https?:\/\/[^\s>]+)/);
+  const caseLink = linkMatch ? linkMatch[1] : null;
+
+  const sendHelp = useMutation({
+    mutationFn: async () => {
+      const msgText = (msg.text || "").replace(/<[^>]*>/g, "").substring(0, 500);
+      await apiRequest("POST", "/api/audit-alerts/send-custom", {
+        message: helpMsg.trim(),
+        slackContext: {
+          user: getUserName(msg.user),
+          caseId: caseId || undefined,
+          caseLink: caseLink || undefined,
+          messagePreview: msgText,
+        },
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Help message sent to Telegram!" });
+      setHelpMsg("");
+      setOpen(false);
+    },
+    onError: (err: Error) => toast({ title: "Failed to send", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setHelpMsg(""); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="h-8 text-xs gap-1 bg-red-50 border-red-200 text-red-600 hover:bg-red-100 dark:bg-red-950 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900" data-testid={`button-need-help-${msg.ts}`}>
+          <HelpCircle className="h-3.5 w-3.5" />
+          Need Help
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-blue-600">
+            <HelpCircle className="h-5 w-5" />
+            Need Help
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          <div className="rounded-lg border border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30 p-3 space-y-1.5">
+            <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Message Info</p>
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              <span className="text-muted-foreground font-medium">From:</span>
+              <span>{getUserName(msg.user)}</span>
+              {caseId && (
+                <>
+                  <span className="text-muted-foreground font-medium">Case ID:</span>
+                  <span className="font-mono text-xs">{caseId}</span>
+                </>
+              )}
+              {caseLink && (
+                <>
+                  <span className="text-muted-foreground font-medium">Link:</span>
+                  <a href={caseLink} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 text-xs truncate hover:underline">{caseLink}</a>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Your Note</label>
+            <Textarea
+              placeholder="Describe what you need help with..."
+              value={helpMsg}
+              onChange={(e) => setHelpMsg(e.target.value)}
+              rows={4}
+              className="resize-none"
+              data-testid="input-help-message"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} data-testid="button-help-cancel">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => sendHelp.mutate()}
+              disabled={sendHelp.isPending || !helpMsg.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              data-testid="button-help-send"
+            >
+              {sendHelp.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+              Send to Telegram
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -2025,34 +2124,37 @@ function MessageCard({
             </div>
           )}
           <div className="flex-1 min-w-0 relative">
-            {can("slack-messages", "send-to-cv") && !cvSent && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={sendSingleToCv}
-                disabled={sendingCv}
-                className="absolute top-0 right-0 h-8 text-xs gap-1"
-                data-testid={`button-send-single-cv-${msg.ts}`}
-              >
-                {sendingCv ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                )}
-                {sendingCv ? "Sending..." : "Send to CV"}
-              </Button>
-            )}
-            {cvSent && (
-              <Badge
-                variant="secondary"
-                className="absolute top-0 right-0 text-xs gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                data-testid={`badge-cv-sent-${msg.ts}`}
-              >
-                <CheckCircle className="h-3 w-3" />
-                Sent to CV
-              </Badge>
-            )}
-            <div className="flex items-center gap-2 flex-wrap pr-24">
+            <div className="absolute top-0 right-0 flex items-center gap-1.5">
+              {can("slack-messages", "send-to-cv") && !cvSent && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={sendSingleToCv}
+                  disabled={sendingCv}
+                  className="h-8 text-xs gap-1"
+                  data-testid={`button-send-single-cv-${msg.ts}`}
+                >
+                  {sendingCv ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                  )}
+                  {sendingCv ? "Sending..." : "Send to CV"}
+                </Button>
+              )}
+              {cvSent && (
+                <Badge
+                  variant="secondary"
+                  className="text-xs gap-1 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                  data-testid={`badge-cv-sent-${msg.ts}`}
+                >
+                  <CheckCircle className="h-3 w-3" />
+                  Sent to CV
+                </Badge>
+              )}
+              <NeedHelpButton msg={msg} getUserName={getUserName} />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap pr-48">
               <span className="font-semibold text-sm" data-testid={`text-user-${msg.ts}`}>{getUserName(msg.user)}</span>
               <span className="text-xs text-muted-foreground">{formatTs(msg.ts)}</span>
               {isReply && <Badge variant="outline" className="text-xs gap-1 border-blue-300 text-blue-600 dark:border-blue-700 dark:text-blue-400"><CornerDownRight className="h-3 w-3" /> Reply</Badge>}
