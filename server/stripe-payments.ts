@@ -724,6 +724,7 @@ export function registerStripePaymentRoutes(app: Express) {
             status: pi.status,
             description: pi.description || "",
             created: pi.created * 1000,
+            lastError: pi.last_payment_error?.message || null,
           });
         }
 

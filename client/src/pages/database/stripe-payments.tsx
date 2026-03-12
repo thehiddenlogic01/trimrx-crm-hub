@@ -308,6 +308,34 @@ export default function StripePaymentsPage() {
                 </Card>
               ) : (
                 <div className="space-y-4">
+                  {searchResult.customers.length > 1 && (
+                    <Card className="animate-fade-in-up">
+                      <CardContent className="py-3 px-4">
+                        <div className="flex flex-wrap items-center gap-4 text-sm">
+                          <span className="font-semibold text-foreground">Summary across {searchResult.customers.length} customers:</span>
+                          <Badge variant="outline" className="gap-1">
+                            <CreditCard className="h-3 w-3" />
+                            {searchResult.paymentIntents.length} Payment Intent{searchResult.paymentIntents.length !== 1 ? "s" : ""}
+                          </Badge>
+                          <Badge variant="outline" className="gap-1">
+                            <DollarSign className="h-3 w-3" />
+                            {(searchResult.payments || []).length} Charge{(searchResult.payments || []).length !== 1 ? "s" : ""}
+                          </Badge>
+                          {searchResult.subscriptions.length > 0 && (
+                            <Badge variant="outline" className="gap-1">
+                              <RefreshCw className="h-3 w-3" />
+                              {searchResult.subscriptions.length} Subscription{searchResult.subscriptions.length !== 1 ? "s" : ""}
+                            </Badge>
+                          )}
+                          {(searchResult.invoices || []).length > 0 && (
+                            <Badge variant="outline" className="gap-1">
+                              {(searchResult.invoices || []).length} Invoice{(searchResult.invoices || []).length !== 1 ? "s" : ""}
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                   {searchResult.customers.map((customer, idx) => {
                     const custPayments = (searchResult.payments || []).filter((p) => p.customerId === customer.id);
                     const custIntents = (searchResult.paymentIntents || []).filter((p) => p.customerId === customer.id);
