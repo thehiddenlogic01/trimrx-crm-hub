@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -37,10 +37,13 @@ import {
   Trash2,
   Database,
   CheckCircle,
+  CheckCircle2,
   XOctagon,
   CreditCard,
   DollarSign,
   ClipboardList,
+  Clock,
+  AlertTriangle,
 } from "lucide-react";
 
 const CHANNEL_ID = "C09KBS41YHH";
@@ -696,6 +699,52 @@ function SendToCvReportDialog({ messages, dateFilter }: { messages: SlackMessage
   );
 }
 
+function PIActivityIcon({ icon, type }: { icon: string; type: string }) {
+  const size = "h-3.5 w-3.5";
+  if (type === "succeeded") return <CheckCircle2 className={`${size} text-green-600`} />;
+  if (type === "failed" || type === "error") return <XCircle className={`${size} text-red-500`} />;
+  if (type === "canceled") return <XCircle className={`${size} text-gray-500`} />;
+  if (icon === "alert" || type === "requires_action") return <AlertTriangle className={`${size} text-yellow-500`} />;
+  if (type === "refunded") return <RefreshCw className={`${size} text-blue-500`} />;
+  if (type === "disputed") return <AlertCircle className={`${size} text-amber-500`} />;
+  return <Clock className={`${size} text-muted-foreground`} />;
+}
+
+function PIActivityInline({ piId }: { piId: string }) {
+  const { data, isLoading, error } = useQuery<{ activity: any[] }>({
+    queryKey: ["/api/stripe-payments/pi-activity", piId],
+    queryFn: async () => {
+      const res = await fetch(`/api/stripe-payments/pi-activity/${piId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch activity");
+      return res.json();
+    },
+  });
+
+  if (isLoading) return <div className="flex items-center gap-2 py-2 px-3 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading activity...</div>;
+  if (error || !data?.activity?.length) return <div className="py-1 px-3 text-[10px] text-muted-foreground italic">No recent activity</div>;
+
+  return (
+    <div className="px-3 py-2" data-testid={`pi-activity-${piId}`}>
+      <h5 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Recent Activity</h5>
+      <div className="relative pl-5 space-y-1.5">
+        <div className="absolute left-[7px] top-1 bottom-1 w-px bg-border" />
+        {data.activity.map((item: any, idx: number) => (
+          <div key={idx} className="relative flex items-start gap-2">
+            <div className="absolute -left-5 top-0.5 bg-background p-0.5">
+              <PIActivityIcon icon={item.icon} type={item.type} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-foreground leading-tight">{item.title}</p>
+              {item.description && <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">{item.description}</p>}
+              <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(item.timestamp).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SlackMessagesPage() {
   const { toast } = useToast();
   const { can } = usePermissions();
@@ -738,6 +787,8 @@ export default function SlackMessagesPage() {
   };
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
   const [trackerFilter, setTrackerFilter] = useState("all");
+  const [expandedPopupPiId, setExpandedPopupPiId] = useState<string | null>(null);
+  const [expandedSidebarPiId, setExpandedSidebarPiId] = useState<string | null>(null);
   const [paymentsMap, _setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>(() => loadFromSession("sba_paymentsMap", {}));
   const setPaymentsMap: typeof _setPaymentsMap = (v) => {
     _setPaymentsMap((prev) => {
@@ -2200,21 +2251,34 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                           <tbody>
                             {data.paymentIntents.map((pi: any) => {
                               const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
+                              const isExpanded = expandedPopupPiId === pi.id;
                               return (
-                                <tr key={pi.id} className="border-t">
-                                  <td className="p-2 text-xs whitespace-nowrap">
-                                    {new Date(pi.created).toLocaleString()}
-                                  </td>
-                                  <td className="p-2 whitespace-nowrap font-medium">
-                                    ${pi.amount.toFixed(2)} {pi.currency}
-                                  </td>
-                                  <td className="p-2">
-                                    <StripeStatusBadge status={displayStatus} />
-                                  </td>
-                                  <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
-                                    {pi.description || "—"}
-                                  </td>
-                                </tr>
+                                <Fragment key={pi.id}>
+                                  <tr className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => setExpandedPopupPiId(isExpanded ? null : pi.id)}>
+                                    <td className="p-2 text-xs whitespace-nowrap">
+                                      {new Date(pi.created).toLocaleString()}
+                                    </td>
+                                    <td className="p-2 whitespace-nowrap font-medium">
+                                      ${pi.amount.toFixed(2)} {pi.currency}
+                                    </td>
+                                    <td className="p-2">
+                                      <StripeStatusBadge status={displayStatus} />
+                                    </td>
+                                    <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
+                                      <div className="flex items-center gap-1">
+                                        {pi.description || "—"}
+                                        {isExpanded ? <ChevronUp className="h-3 w-3 flex-shrink-0" /> : <ChevronDown className="h-3 w-3 flex-shrink-0" />}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr>
+                                      <td colSpan={4} className="bg-muted/20 border-t">
+                                        <PIActivityInline piId={pi.id} />
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
                               );
                             })}
                           </tbody>
@@ -2691,15 +2755,24 @@ function MessageCard({
                   <div className="space-y-1" data-testid={`payments-intents-${msg.ts}`}>
                     {paymentData.paymentIntents.map((pi: any, idx: number) => {
                       const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
+                      const isSidebarExpanded = expandedSidebarPiId === pi.id;
                       return (
-                      <div key={pi.id || idx} className="border rounded px-2 py-1 bg-muted/30">
+                      <div key={pi.id || idx} className="border rounded px-2 py-1 bg-muted/30 cursor-pointer" onClick={() => setExpandedSidebarPiId(isSidebarExpanded ? null : pi.id)}>
                         <div className="flex justify-between items-center gap-1">
                           <span className="font-medium">${pi.amount?.toFixed(2)} {pi.currency}</span>
-                          <StripeStatusBadge status={displayStatus} size="xs" />
+                          <div className="flex items-center gap-1">
+                            <StripeStatusBadge status={displayStatus} size="xs" />
+                            {isSidebarExpanded ? <ChevronUp className="h-2.5 w-2.5 text-muted-foreground" /> : <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />}
+                          </div>
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">
                           {new Date(pi.created).toLocaleDateString()} — {pi.description || "—"}
                         </div>
+                        {isSidebarExpanded && (
+                          <div className="mt-1 border-t pt-1" onClick={(e) => e.stopPropagation()}>
+                            <PIActivityInline piId={pi.id} />
+                          </div>
+                        )}
                       </div>
                       );
                     })}

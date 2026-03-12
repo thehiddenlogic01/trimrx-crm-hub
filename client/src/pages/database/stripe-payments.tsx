@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,12 @@ import {
   ExternalLink,
   AlertCircle,
   ArrowDownCircle,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { StripeStatusBadge } from "@/lib/stripe-status";
 
@@ -116,11 +122,81 @@ function formatDateTime(ts: number) {
   });
 }
 
+interface ActivityItem {
+  type: string;
+  title: string;
+  description: string;
+  timestamp: number;
+  icon: string;
+}
+
+function ActivityIcon({ icon, type }: { icon: string; type: string }) {
+  const size = "h-3.5 w-3.5";
+  if (type === "succeeded") return <CheckCircle2 className={`${size} text-green-600`} />;
+  if (type === "failed" || type === "error") return <XCircle className={`${size} text-red-500`} />;
+  if (type === "canceled") return <XCircle className={`${size} text-gray-500`} />;
+  if (icon === "alert" || type === "requires_action") return <AlertTriangle className={`${size} text-yellow-500`} />;
+  if (type === "refunded") return <RefreshCw className={`${size} text-blue-500`} />;
+  if (type === "disputed") return <AlertCircle className={`${size} text-amber-500`} />;
+  return <Clock className={`${size} text-muted-foreground`} />;
+}
+
+function PIActivityTimeline({ piId }: { piId: string }) {
+  const { data, isLoading, error } = useQuery<{ activity: ActivityItem[] }>({
+    queryKey: ["/api/stripe-payments/pi-activity", piId],
+    queryFn: async () => {
+      const res = await fetch(`/api/stripe-payments/pi-activity/${piId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch activity");
+      return res.json();
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-3 px-4 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Loading activity...
+      </div>
+    );
+  }
+
+  if (error || !data?.activity?.length) {
+    return (
+      <div className="py-2 px-4 text-xs text-muted-foreground italic">
+        No recent activity
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-2" data-testid={`pi-activity-${piId}`}>
+      <h5 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Recent Activity</h5>
+      <div className="relative pl-5 space-y-2">
+        <div className="absolute left-[7px] top-1 bottom-1 w-px bg-border" />
+        {data.activity.map((item, idx) => (
+          <div key={idx} className="relative flex items-start gap-2">
+            <div className="absolute -left-5 top-0.5 bg-background p-0.5">
+              <ActivityIcon icon={item.icon} type={item.type} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-foreground leading-tight">{item.title}</p>
+              {item.description && (
+                <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">{item.description}</p>
+              )}
+              <p className="text-[10px] text-muted-foreground mt-0.5">{formatDateTime(item.timestamp)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function StripePaymentsPage() {
   const { toast } = useToast();
   const [searchEmail, setSearchEmail] = useState("");
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
+  const [expandedPiId, setExpandedPiId] = useState<string | null>(null);
 
   const { data: connectionStatus, isLoading: statusLoading } = useQuery<{ connected: boolean; source: string }>({
     queryKey: ["/api/stripe-payments/status"],
@@ -328,19 +404,38 @@ export default function StripePaymentsPage() {
                                   <tbody>
                                     {custIntents.map((pi) => {
                                       const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
+                                      const isExpanded = expandedPiId === pi.id;
                                       return (
-                                        <tr key={pi.id} className="border-t hover:bg-muted/30" data-testid={`row-intent-${pi.id}`}>
-                                          <td className="px-2.5 py-1.5 whitespace-nowrap">{formatDateTime(pi.created)}</td>
-                                          <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                            <span className="font-medium">${pi.amount.toFixed(2)}</span>
-                                            <span className="text-muted-foreground ml-0.5">{pi.currency}</span>
-                                          </td>
-                                          <td className="px-2.5 py-1.5">
-                                            <StripeStatusBadge status={displayStatus} />
-                                          </td>
-                                          <td className="px-2.5 py-1.5 text-muted-foreground max-w-[150px] truncate">{pi.description || "—"}</td>
-                                          <td className="px-2.5 py-1.5 text-muted-foreground font-mono text-[10px]">{pi.id.slice(0, 20)}...</td>
-                                        </tr>
+                                        <Fragment key={pi.id}>
+                                          <tr
+                                            className="border-t hover:bg-muted/30 cursor-pointer"
+                                            onClick={() => setExpandedPiId(isExpanded ? null : pi.id)}
+                                            data-testid={`row-intent-${pi.id}`}
+                                          >
+                                            <td className="px-2.5 py-1.5 whitespace-nowrap">{formatDateTime(pi.created)}</td>
+                                            <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                              <span className="font-medium">${pi.amount.toFixed(2)}</span>
+                                              <span className="text-muted-foreground ml-0.5">{pi.currency}</span>
+                                            </td>
+                                            <td className="px-2.5 py-1.5">
+                                              <StripeStatusBadge status={displayStatus} />
+                                            </td>
+                                            <td className="px-2.5 py-1.5 text-muted-foreground max-w-[150px] truncate">{pi.description || "—"}</td>
+                                            <td className="px-2.5 py-1.5 text-muted-foreground font-mono text-[10px]">
+                                              <div className="flex items-center gap-1">
+                                                {pi.id.slice(0, 20)}...
+                                                {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                              </div>
+                                            </td>
+                                          </tr>
+                                          {isExpanded && (
+                                            <tr>
+                                              <td colSpan={5} className="bg-muted/20 border-t">
+                                                <PIActivityTimeline piId={pi.id} />
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </Fragment>
                                       );
                                     })}
                                   </tbody>

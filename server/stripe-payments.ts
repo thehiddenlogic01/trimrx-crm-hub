@@ -429,6 +429,173 @@ export function registerStripePaymentRoutes(app: Express) {
     }
   });
 
+  app.get("/api/stripe-payments/pi-activity/:id", requireAuth, async (req, res) => {
+    const piId = req.params.id;
+    if (!piId || !piId.startsWith("pi_")) {
+      return res.status(400).json({ message: "Valid payment intent ID is required" });
+    }
+
+    const stripe = await getStripeClient();
+    if (!stripe) {
+      return res.status(400).json({ message: "Stripe is not connected" });
+    }
+
+    try {
+      const pi = await stripe.paymentIntents.retrieve(piId);
+
+      const charges = await stripe.charges.list({ payment_intent: piId, limit: 20 });
+
+      const timeline: Array<{ type: string; title: string; description: string; timestamp: number; icon: string }> = [];
+
+      timeline.push({
+        type: "created",
+        title: "Payment started",
+        description: "",
+        timestamp: pi.created * 1000,
+        icon: "clock",
+      });
+
+      let latestChargeTime = pi.created * 1000;
+
+      for (const charge of charges.data) {
+        const chargeTime = charge.created * 1000;
+        if (chargeTime > latestChargeTime) latestChargeTime = chargeTime;
+
+        if (charge.status === "succeeded") {
+          timeline.push({
+            type: "succeeded",
+            title: "Payment succeeded",
+            description: charge.outcome?.seller_message || "",
+            timestamp: chargeTime,
+            icon: "check",
+          });
+        }
+        if (charge.status === "failed") {
+          timeline.push({
+            type: "failed",
+            title: "Payment failed",
+            description: charge.failure_message || charge.outcome?.seller_message || "",
+            timestamp: chargeTime,
+            icon: "x",
+          });
+        }
+        if (charge.refunded && charge.refunds?.data?.length) {
+          for (const refund of charge.refunds.data) {
+            timeline.push({
+              type: "refunded",
+              title: "Payment refunded",
+              description: `$${(refund.amount / 100).toFixed(2)} ${refund.currency.toUpperCase()} refunded`,
+              timestamp: refund.created * 1000,
+              icon: "refund",
+            });
+          }
+        } else if (charge.refunded) {
+          timeline.push({
+            type: "refunded",
+            title: "Payment refunded",
+            description: `$${(charge.amount_refunded / 100).toFixed(2)} ${charge.currency.toUpperCase()} refunded`,
+            timestamp: chargeTime + 1000,
+            icon: "refund",
+          });
+        }
+        if (charge.disputed) {
+          const disputeTime = typeof charge.dispute === "object" && charge.dispute
+            ? ((charge.dispute as any).created * 1000)
+            : chargeTime + 2000;
+          timeline.push({
+            type: "disputed",
+            title: "Dispute opened",
+            description: "",
+            timestamp: disputeTime,
+            icon: "alert",
+          });
+        }
+      }
+
+      const statusTime = latestChargeTime + 1;
+
+      if (pi.last_payment_error) {
+        const err = pi.last_payment_error;
+        let title = "Payment error";
+        let description = err.message || "";
+        let icon = "alert";
+
+        if (err.code === "authentication_required" || pi.status === "requires_action") {
+          title = "3D Secure attempt incomplete";
+          description = "The cardholder began 3D Secure authentication but has not completed it.";
+          icon = "alert";
+        } else if (err.code === "card_declined") {
+          title = "Card declined";
+          description = err.decline_code
+            ? `Decline reason: ${err.decline_code.replace(/_/g, " ")}`
+            : (err.message || "");
+          icon = "x";
+        }
+
+        const alreadyHasError = timeline.some(t => t.type === "failed");
+        if (!alreadyHasError) {
+          timeline.push({
+            type: "error",
+            title,
+            description,
+            timestamp: statusTime,
+            icon,
+          });
+        }
+      } else if (pi.status === "requires_action") {
+        timeline.push({
+          type: "requires_action",
+          title: "3D Secure attempt incomplete",
+          description: "The cardholder began 3D Secure authentication but has not completed it.",
+          timestamp: statusTime,
+          icon: "alert",
+        });
+      } else if (pi.status === "requires_payment_method") {
+        const hasChargeFailure = timeline.some(t => t.type === "failed");
+        if (!hasChargeFailure) {
+          timeline.push({
+            type: "incomplete",
+            title: "Awaiting payment method",
+            description: "The customer has not yet provided a payment method.",
+            timestamp: statusTime,
+            icon: "clock",
+          });
+        }
+      } else if (pi.status === "requires_confirmation") {
+        timeline.push({
+          type: "incomplete",
+          title: "Awaiting confirmation",
+          description: "The payment intent requires confirmation.",
+          timestamp: statusTime,
+          icon: "clock",
+        });
+      } else if (pi.status === "canceled") {
+        timeline.push({
+          type: "canceled",
+          title: "Payment canceled",
+          description: pi.cancellation_reason ? `Reason: ${pi.cancellation_reason.replace(/_/g, " ")}` : "",
+          timestamp: statusTime,
+          icon: "x",
+        });
+      } else if (pi.status === "processing") {
+        timeline.push({
+          type: "processing",
+          title: "Payment processing",
+          description: "The payment is being processed.",
+          timestamp: statusTime,
+          icon: "clock",
+        });
+      }
+
+      timeline.sort((a, b) => b.timestamp - a.timestamp);
+
+      res.json({ activity: timeline });
+    } catch (err: any) {
+      console.error("Stripe PI activity error:", err);
+      res.status(500).json({ message: err.message || "Failed to fetch payment intent activity" });
+    }
+  });
+
   app.post("/api/stripe-payments/lookup-by-case", requireAuth, async (req, res) => {
     const { caseLink, caseId } = req.body;
     if (!caseLink && !caseId) {
