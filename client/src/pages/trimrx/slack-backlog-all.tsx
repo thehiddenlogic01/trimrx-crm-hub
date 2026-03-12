@@ -736,7 +736,7 @@ function PIActivityInline({ piId }: { piId: string }) {
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-foreground leading-tight">{item.title}</p>
               {item.description && <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">{item.description}</p>}
-              <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(item.timestamp).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(item.timestamp).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}</p>
             </div>
           </div>
         ))}
@@ -2255,7 +2255,7 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                                 <Fragment key={pi.id}>
                                   <tr className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => setExpandedPopupPiId(isExpanded ? null : pi.id)}>
                                     <td className="p-2 text-xs whitespace-nowrap">
-                                      {new Date(pi.created).toLocaleString()}
+                                      {new Date(pi.created).toLocaleString("en-US", { timeZone: "America/New_York" })}
                                     </td>
                                     <td className="p-2 whitespace-nowrap font-medium">
                                       ${pi.amount.toFixed(2)} {pi.currency}
@@ -2766,7 +2766,7 @@ function MessageCard({
                           </div>
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(pi.created).toLocaleDateString()} — {pi.description || "—"}
+                          {new Date(pi.created).toLocaleDateString("en-US", { timeZone: "America/New_York" })} — {pi.description || "—"}
                         </div>
                         {isSidebarExpanded && (
                           <div className="mt-1 border-t pt-1" onClick={(e) => e.stopPropagation()}>

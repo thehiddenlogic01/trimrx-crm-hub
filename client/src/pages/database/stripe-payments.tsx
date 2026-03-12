@@ -109,6 +109,7 @@ function formatDate(ts: number) {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "America/New_York",
   });
 }
 
@@ -119,6 +120,7 @@ function formatDateTime(ts: number) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/New_York",
   });
 }
 
