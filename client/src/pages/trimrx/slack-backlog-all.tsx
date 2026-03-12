@@ -44,6 +44,7 @@ import {
   ClipboardList,
   Clock,
   AlertTriangle,
+  HelpCircle,
 } from "lucide-react";
 
 const CHANNEL_ID = "C09KBS41YHH";
@@ -742,6 +743,68 @@ function PIActivityInline({ piId }: { piId: string }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function NeedHelpButton() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [helpMsg, setHelpMsg] = useState("");
+  const sendHelp = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/audit-alerts/send-custom", { message: helpMsg.trim() });
+    },
+    onSuccess: () => {
+      toast({ title: "Help message sent to Telegram!" });
+      setHelpMsg("");
+      setOpen(false);
+    },
+    onError: (err: Error) => toast({ title: "Failed to send", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setHelpMsg(""); }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" data-testid="button-need-help">
+          <HelpCircle className="h-3.5 w-3.5 mr-1" />
+          Need Help
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <HelpCircle className="h-5 w-5 text-blue-500" />
+            Need Help
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Write your message below. It will be sent to the Telegram group so the team can assist you.
+          </p>
+          <Textarea
+            placeholder="Describe what you need help with..."
+            value={helpMsg}
+            onChange={(e) => setHelpMsg(e.target.value)}
+            rows={5}
+            data-testid="input-help-message"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)} data-testid="button-help-cancel">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => sendHelp.mutate()}
+              disabled={sendHelp.isPending || !helpMsg.trim()}
+              data-testid="button-help-send"
+            >
+              {sendHelp.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+              Send
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1967,6 +2030,7 @@ export default function SlackMessagesPage() {
               </Button>
             </>
           )}
+          <NeedHelpButton />
         </div>
       </div>
 

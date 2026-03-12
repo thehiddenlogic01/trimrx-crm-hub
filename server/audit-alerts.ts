@@ -271,6 +271,38 @@ export function setupAuditAlertRoutes(app: Express) {
     }
   });
 
+  app.post("/api/audit-alerts/send-custom", async (req: Request, res: Response) => {
+    if (!req.session?.user) return res.status(401).json({ error: "Not authenticated" });
+    try {
+      const config = await getAlertConfig();
+      if (!config.telegramBotToken || !config.telegramChatId) {
+        return res.status(400).json({ error: "Telegram bot is not configured. Ask an admin to set it up in Alerts settings." });
+      }
+
+      const { message } = req.body;
+      if (!message || !message.trim()) {
+        return res.status(400).json({ error: "Message cannot be empty" });
+      }
+
+      const username = req.session.user.username || "Unknown";
+      const now = new Date().toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+
+      let text = `<b>🆘 Need Help — TrimRX</b>\n`;
+      text += `<i>From: ${escapeHtml(username)} • ${now} ET</i>\n\n`;
+      text += `<b>📝 Note:</b>\n${escapeHtml(message.trim())}\n`;
+
+      const result = await sendTelegramMessage(config.telegramBotToken, config.telegramChatId, text);
+
+      if (result.ok) {
+        res.json({ success: true });
+      } else {
+        res.status(400).json({ error: result.error || "Failed to send message" });
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   (async () => {
     try {
       const config = await getAlertConfig();
