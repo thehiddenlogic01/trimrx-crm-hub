@@ -326,18 +326,23 @@ export default function StripePaymentsPage() {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {custIntents.map((pi) => (
-                                      <tr key={pi.id} className="border-t hover:bg-muted/30" data-testid={`row-intent-${pi.id}`}>
-                                        <td className="px-2.5 py-1.5 whitespace-nowrap">{formatDateTime(pi.created)}</td>
-                                        <td className="px-2.5 py-1.5 whitespace-nowrap">
-                                          <span className="font-medium">${pi.amount.toFixed(2)}</span>
-                                          <span className="text-muted-foreground ml-0.5">{pi.currency}</span>
-                                        </td>
-                                        <td className="px-2.5 py-1.5"><StripeStatusBadge status={pi.status} /></td>
-                                        <td className="px-2.5 py-1.5 text-muted-foreground max-w-[150px] truncate">{pi.description || "—"}</td>
-                                        <td className="px-2.5 py-1.5 text-muted-foreground font-mono text-[10px]">{pi.id.slice(0, 20)}...</td>
-                                      </tr>
-                                    ))}
+                                    {custIntents.map((pi) => {
+                                      const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
+                                      return (
+                                        <tr key={pi.id} className="border-t hover:bg-muted/30" data-testid={`row-intent-${pi.id}`}>
+                                          <td className="px-2.5 py-1.5 whitespace-nowrap">{formatDateTime(pi.created)}</td>
+                                          <td className="px-2.5 py-1.5 whitespace-nowrap">
+                                            <span className="font-medium">${pi.amount.toFixed(2)}</span>
+                                            <span className="text-muted-foreground ml-0.5">{pi.currency}</span>
+                                          </td>
+                                          <td className="px-2.5 py-1.5">
+                                            <StripeStatusBadge status={displayStatus} />
+                                          </td>
+                                          <td className="px-2.5 py-1.5 text-muted-foreground max-w-[150px] truncate">{pi.description || "—"}</td>
+                                          <td className="px-2.5 py-1.5 text-muted-foreground font-mono text-[10px]">{pi.id.slice(0, 20)}...</td>
+                                        </tr>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>

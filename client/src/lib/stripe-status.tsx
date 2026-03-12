@@ -50,9 +50,9 @@ export function stripeStatusLabel(status: string): string {
     case "active": return "Active";
     case "canceled": return "Canceled";
     case "failed": return "Failed";
-    case "requires_payment_method": return "Requires Payment Method";
-    case "requires_confirmation": return "Requires Confirmation";
-    case "requires_action": return "Requires Action";
+    case "requires_payment_method": return "Incomplete";
+    case "requires_confirmation": return "Incomplete";
+    case "requires_action": return "Incomplete";
     case "requires_capture": return "Uncaptured";
     case "uncaptured": return "Uncaptured";
     case "processing": return "Processing";
@@ -106,7 +106,7 @@ export function StripeStatusIcon({ status, className = "h-3 w-3" }: { status: st
     case "requires_payment_method":
     case "requires_confirmation":
     case "requires_action":
-      return <Zap className={className} />;
+      return <Clock className={className} />;
     default:
       return <Clock className={className} />;
   }

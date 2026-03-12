@@ -2198,22 +2198,25 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {data.paymentIntents.map((pi: any) => (
-                              <tr key={pi.id} className="border-t">
-                                <td className="p-2 text-xs whitespace-nowrap">
-                                  {new Date(pi.created).toLocaleString()}
-                                </td>
-                                <td className="p-2 whitespace-nowrap font-medium">
-                                  ${pi.amount.toFixed(2)} {pi.currency}
-                                </td>
-                                <td className="p-2">
-                                  <StripeStatusBadge status={pi.status} />
-                                </td>
-                                <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
-                                  {pi.description || "—"}
-                                </td>
-                              </tr>
-                            ))}
+                            {data.paymentIntents.map((pi: any) => {
+                              const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
+                              return (
+                                <tr key={pi.id} className="border-t">
+                                  <td className="p-2 text-xs whitespace-nowrap">
+                                    {new Date(pi.created).toLocaleString()}
+                                  </td>
+                                  <td className="p-2 whitespace-nowrap font-medium">
+                                    ${pi.amount.toFixed(2)} {pi.currency}
+                                  </td>
+                                  <td className="p-2">
+                                    <StripeStatusBadge status={displayStatus} />
+                                  </td>
+                                  <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
+                                    {pi.description || "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -2686,17 +2689,20 @@ function MessageCard({
                 )}
                 {paymentData.found && paymentData.paymentIntents && paymentData.paymentIntents.length > 0 ? (
                   <div className="space-y-1" data-testid={`payments-intents-${msg.ts}`}>
-                    {paymentData.paymentIntents.map((pi: any, idx: number) => (
+                    {paymentData.paymentIntents.map((pi: any, idx: number) => {
+                      const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
+                      return (
                       <div key={pi.id || idx} className="border rounded px-2 py-1 bg-muted/30">
                         <div className="flex justify-between items-center gap-1">
                           <span className="font-medium">${pi.amount?.toFixed(2)} {pi.currency}</span>
-                          <StripeStatusBadge status={pi.status} size="xs" />
+                          <StripeStatusBadge status={displayStatus} size="xs" />
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">
                           {new Date(pi.created).toLocaleDateString()} — {pi.description || "—"}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : paymentData.found && paymentData.customers && paymentData.customers.length > 0 ? (
                   <span className="text-muted-foreground italic" data-testid={`payments-info-${msg.ts}`}>No payment intents</span>
