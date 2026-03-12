@@ -54,6 +54,8 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 const UserManagementPage = lazy(() => import("@/pages/admin/users"));
+const AddUserPage = lazy(() => import("@/pages/admin/user-new"));
+const EditUserPage = lazy(() => import("@/pages/admin/user-edit"));
 const ApiKeysPage = lazy(() => import("@/pages/admin/api-keys"));
 const SlackPage = lazy(() => import("@/pages/slack"));
 const CvSupportPage = lazy(() => import("@/pages/trimrx/cv-support"));
@@ -166,6 +168,12 @@ function AppLayout() {
                 <Switch>
                   <Route path="/">
                     {() => <ProtectedRoute component={DashboardPage} path="/" />}
+                  </Route>
+                  <Route path="/admin/users/new">
+                    {() => <ProtectedRoute component={AddUserPage} path="/admin/users" />}
+                  </Route>
+                  <Route path="/admin/users/:id/edit">
+                    {() => <ProtectedRoute component={EditUserPage} path="/admin/users" />}
                   </Route>
                   <Route path="/admin/users">
                     {() => <ProtectedRoute component={UserManagementPage} path="/admin/users" />}
