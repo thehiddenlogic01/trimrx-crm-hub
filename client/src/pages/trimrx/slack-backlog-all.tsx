@@ -785,39 +785,57 @@ function NeedHelpButton({ msg, getUserName }: { msg: any; getUserName: (id: stri
           Need Help
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5 text-blue-500" />
+          <DialogTitle className="flex items-center gap-2 text-blue-600">
+            <HelpCircle className="h-5 w-5" />
             Need Help
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          <div className="rounded-md bg-muted/50 p-3 text-xs space-y-1">
-            <p className="text-muted-foreground font-medium">This message will be included:</p>
-            <p><span className="font-medium">From:</span> {getUserName(msg.user)}</p>
-            {caseId && <p><span className="font-medium">Case ID:</span> {caseId}</p>}
-            {caseLink && <p className="truncate"><span className="font-medium">Link:</span> {caseLink}</p>}
+        <div className="space-y-4 pt-1">
+          <div className="rounded-lg border border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30 p-3 space-y-1.5">
+            <p className="text-xs font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Message Info</p>
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              <span className="text-muted-foreground font-medium">From:</span>
+              <span>{getUserName(msg.user)}</span>
+              {caseId && (
+                <>
+                  <span className="text-muted-foreground font-medium">Case ID:</span>
+                  <span className="font-mono text-xs">{caseId}</span>
+                </>
+              )}
+              {caseLink && (
+                <>
+                  <span className="text-muted-foreground font-medium">Link:</span>
+                  <a href={caseLink} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 text-xs truncate hover:underline">{caseLink}</a>
+                </>
+              )}
+            </div>
           </div>
-          <Textarea
-            placeholder="Add your note — what do you need help with?"
-            value={helpMsg}
-            onChange={(e) => setHelpMsg(e.target.value)}
-            rows={4}
-            data-testid="input-help-message"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setOpen(false)} data-testid="button-help-cancel">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Your Note</label>
+            <Textarea
+              placeholder="Describe what you need help with..."
+              value={helpMsg}
+              onChange={(e) => setHelpMsg(e.target.value)}
+              rows={4}
+              className="resize-none"
+              data-testid="input-help-message"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} data-testid="button-help-cancel">
               Cancel
             </Button>
             <Button
               size="sm"
               onClick={() => sendHelp.mutate()}
               disabled={sendHelp.isPending || !helpMsg.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
               data-testid="button-help-send"
             >
               {sendHelp.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
-              Send
+              Send to Telegram
             </Button>
           </div>
         </div>

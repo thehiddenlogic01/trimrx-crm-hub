@@ -272,7 +272,7 @@ export function setupAuditAlertRoutes(app: Express) {
   });
 
   app.post("/api/audit-alerts/send-custom", async (req: Request, res: Response) => {
-    if (!req.session?.user) return res.status(401).json({ error: "Not authenticated" });
+    if (!req.isAuthenticated?.() || !req.user) return res.status(401).json({ error: "Not authenticated" });
     try {
       const config = await getAlertConfig();
       if (!config.telegramBotToken || !config.telegramChatId) {
@@ -284,7 +284,7 @@ export function setupAuditAlertRoutes(app: Express) {
         return res.status(400).json({ error: "Message cannot be empty" });
       }
 
-      const username = req.session.user.username || "Unknown";
+      const username = (req.user as any).username || "Unknown";
       const now = new Date().toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 
       let text = `<b>🆘 Need Help — TrimRX</b>\n`;
