@@ -788,7 +788,6 @@ export default function SlackMessagesPage() {
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
   const [trackerFilter, setTrackerFilter] = useState("all");
   const [expandedPopupPiId, setExpandedPopupPiId] = useState<string | null>(null);
-  const [expandedSidebarPiId, setExpandedSidebarPiId] = useState<string | null>(null);
   const [paymentsMap, _setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>(() => loadFromSession("sba_paymentsMap", {}));
   const setPaymentsMap: typeof _setPaymentsMap = (v) => {
     _setPaymentsMap((prev) => {
@@ -2368,6 +2367,7 @@ function MessageCard({
   const [sendingCv, setSendingCv] = useState(false);
   const [cvSent, setCvSent] = useState(false);
   const [pullingSingle, setPullingSingle] = useState(false);
+  const [expandedSidebarPiId, setExpandedSidebarPiId] = useState<string | null>(null);
 
   const [expandReady, setExpandReady] = useState(!expandAllReplies);
   useEffect(() => {
