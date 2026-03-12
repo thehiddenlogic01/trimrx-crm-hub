@@ -41,6 +41,7 @@ import {
   Search,
   SendHorizonal,
   ClipboardCheck,
+  Bell,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { APP_SECTIONS, hasSectionAccess, hasPageAccess } from "@shared/sections";
@@ -79,6 +80,7 @@ const adminMenu = [
   { title: "User Management", url: "/admin/users", icon: UserCog },
   { title: "API Keys", url: "/admin/api-keys", icon: KeyRound },
   { title: "Audit Report", url: "/admin/audit-report", icon: ClipboardCheck },
+  { title: "Alerts", url: "/admin/alerts", icon: Bell },
   { title: "Slack", url: "/slack", icon: Hash },
   { title: "Integrations", url: "/integrations", icon: Zap },
   { title: "Settings", url: "/admin/settings", icon: Settings },

@@ -77,6 +77,7 @@ const GptChatPage = lazy(() => import("@/pages/gpt-chat"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations"));
 const AdminSettingsPage = lazy(() => import("@/pages/admin/settings"));
 const AuditReportPage = lazy(() => import("@/pages/admin/audit-report"));
+const AlertsPage = lazy(() => import("@/pages/admin/alerts"));
 const PtFinderPage = lazy(() => import("@/pages/database/pt-finder"));
 const InternalBdPage = lazy(() => import("@/pages/trimrx/internal-bd"));
 const StripePaymentsPage = lazy(() => import("@/pages/database/stripe-payments"));
@@ -240,6 +241,9 @@ function AppLayout() {
                   </Route>
                   <Route path="/admin/audit-report">
                     {() => <ProtectedRoute component={AuditReportPage} path="/admin/audit-report" />}
+                  </Route>
+                  <Route path="/admin/alerts">
+                    {() => <ProtectedRoute component={AlertsPage} path="/admin/alerts" />}
                   </Route>
                   <Route path="/database/pt-finder">
                     {() => <ProtectedRoute component={PtFinderPage} path="/database/pt-finder" />}

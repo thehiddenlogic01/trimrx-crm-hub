@@ -14,6 +14,7 @@ import { registerChatRoutes } from "./replit_integrations/chat";
 import { setupPtFinderRoutes } from "./pt-finder";
 import { registerStripePaymentRoutes } from "./stripe-payments";
 import { setupAuditLogRoutes } from "./audit-logs";
+import { setupAuditAlertRoutes } from "./audit-alerts";
 import { seedDefaultUser } from "./seed";
 
 export async function registerRoutes(
@@ -34,6 +35,7 @@ export async function registerRoutes(
   setupPtFinderRoutes(app);
   registerStripePaymentRoutes(app);
   setupAuditLogRoutes(app);
+  setupAuditAlertRoutes(app);
   await seedDefaultUser();
 
   return httpServer;

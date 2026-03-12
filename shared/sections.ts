@@ -77,6 +77,7 @@ export const APP_SECTIONS = [
       "/settings",
       "/admin/settings",
       "/admin/audit-report",
+      "/admin/alerts",
     ],
   },
 ] as const;
