@@ -677,7 +677,7 @@ function NeedHelpButton({ msg, getUserName }: { msg: any; getUserName: (id: stri
 
   const sendHelp = useMutation({
     mutationFn: async () => {
-      const msgText = (msg.text || "").replace(/<[^>]*>/g, "").substring(0, 500);
+      const msgText = (msg.text || "").replace(/<[^>]*>/g, "");
       await apiRequest("POST", "/api/audit-alerts/send-custom", {
         message: helpMsg.trim(),
         slackContext: {

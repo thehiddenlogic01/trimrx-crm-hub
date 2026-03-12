@@ -301,9 +301,8 @@ export function setupAuditAlertRoutes(app: Express) {
         if (slackContext.caseId) text += `🆔 <b>Case ID:</b> <code>${escapeHtml(slackContext.caseId)}</code>\n`;
         if (slackContext.caseLink) text += `🔗 <b>Link:</b> <a href="${escapeHtml(slackContext.caseLink)}">Open Case</a>\n`;
         if (slackContext.messagePreview) {
-          const preview = slackContext.messagePreview.substring(0, 300);
           text += `\n📄 <b>Original Message:</b>\n`;
-          text += `<blockquote>${escapeHtml(preview)}${slackContext.messagePreview.length > 300 ? "..." : ""}</blockquote>\n`;
+          text += `<blockquote>${escapeHtml(slackContext.messagePreview)}</blockquote>\n`;
         }
       }
 
