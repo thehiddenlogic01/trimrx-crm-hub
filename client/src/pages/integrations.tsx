@@ -496,6 +496,8 @@ function PtFinderSection() {
   const [spreadsheetId, setSpreadsheetId] = useState("");
   const [sheetName, setSheetName] = useState("");
   const [headerRow, setHeaderRow] = useState("");
+  const [refundsSheetName, setRefundsSheetName] = useState("");
+  const [refundsHeaderRow, setRefundsHeaderRow] = useState("");
 
   const { data: config } = useQuery<any>({
     queryKey: ["/api/pt-finder/config"],
@@ -511,6 +513,9 @@ function PtFinderSection() {
       if (sheetName.trim()) payload.sheetName = sheetName.trim();
       else if (config?.sheetName) payload.sheetName = config.sheetName;
       payload.headerRow = headerRow.trim() ? parseInt(headerRow) : (config?.headerRow || 1);
+      if (refundsSheetName.trim()) payload.refundsSheetName = refundsSheetName.trim();
+      else if (config?.refundsSheetName) payload.refundsSheetName = config.refundsSheetName;
+      payload.refundsHeaderRow = refundsHeaderRow.trim() ? parseInt(refundsHeaderRow) : (config?.refundsHeaderRow || 1);
       if (credentials.trim()) payload.credentials = credentials.trim();
       await apiRequest("POST", "/api/pt-finder/config", payload);
     },
@@ -597,6 +602,28 @@ function PtFinderSection() {
               value={headerRow}
               onChange={(e) => setHeaderRow(e.target.value)}
               data-testid="input-ptfinder-header-row"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Refunds Sheet Name</Label>
+            <Input
+              placeholder={config?.refundsSheetName || "Refunds tab name (optional)"}
+              value={refundsSheetName}
+              onChange={(e) => setRefundsSheetName(e.target.value)}
+              data-testid="input-ptfinder-refunds-sheet-name"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Refunds Header Row</Label>
+            <Input
+              type="number"
+              placeholder={config?.refundsHeaderRow?.toString() || "1"}
+              value={refundsHeaderRow}
+              onChange={(e) => setRefundsHeaderRow(e.target.value)}
+              data-testid="input-ptfinder-refunds-header-row"
             />
           </div>
         </div>
