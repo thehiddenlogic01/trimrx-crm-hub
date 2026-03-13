@@ -948,8 +948,9 @@ export default function SlackMessagesPage() {
     });
   };
 
-  const { data: slackStatus } = useQuery<{ connected: boolean; team?: string }>({
+  const { data: slackStatus } = useQuery<{ connected: boolean; team?: string; socketModeActive?: boolean }>({
     queryKey: ["/api/slack/status"],
+    refetchInterval: 30000,
   });
 
   const forceRefreshRef = useRef(false);
@@ -1867,23 +1868,31 @@ export default function SlackMessagesPage() {
             </PopoverContent>
           </Popover>
           )}
-          <div className="relative">
-            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="pl-9 pr-8 h-9 w-[180px]"
-              data-testid="input-date-filter"
-            />
-            {dateFilter && (
-              <button
-                onClick={() => setDateFilter("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                data-testid="button-clear-date"
-              >
-                <X className="h-4 w-4" />
-              </button>
+          <div className="flex items-center gap-1.5">
+            <div className="relative">
+              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="pl-9 pr-8 h-9 w-[180px]"
+                data-testid="input-date-filter"
+              />
+              {dateFilter && (
+                <button
+                  onClick={() => setDateFilter("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  data-testid="button-clear-date"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            {dateFilter && slackStatus?.socketModeActive && (
+              <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium" title="Receiving live updates via Socket Mode">
+                <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                Live
+              </span>
             )}
           </div>
           <Button
@@ -2152,6 +2161,7 @@ export default function SlackMessagesPage() {
               refundData={refundDataMap[msg.ts]}
               lastPulledTime={lastPulledPerMsg[msg.ts] || lastPulledTime}
               onPullSingle={handlePullSingle}
+              socketModeActive={slackStatus?.socketModeActive}
             />
           ))}
         </div>
@@ -2483,6 +2493,7 @@ function MessageCard({
   lastPulledTime,
   onPullSingle,
   expandIndex = 0,
+  socketModeActive,
 }: {
   msg: SlackMessage;
   getUserName: (id: string) => string;
@@ -2514,6 +2525,7 @@ function MessageCard({
   refundData?: { found?: boolean; record?: Record<string, string>; headers?: string[]; message?: string; statusFromP?: string; reason?: string } | null;
   lastPulledTime?: Date | null;
   onPullSingle?: (msg: SlackMessage) => Promise<void>;
+  socketModeActive?: boolean;
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -2626,7 +2638,8 @@ function MessageCard({
     },
     enabled: isExpanded && expandReady && msg.reply_count > 0,
     retry: 1,
-    staleTime: 15 * 60 * 1000,
+    staleTime: 0,
+    refetchInterval: isExpanded ? 30000 : false,
   });
 
   const replyResolvedRef = useRef<Set<string>>(new Set());
@@ -3052,6 +3065,9 @@ function MessageCard({
             >
               <MessageCircle className="h-3.5 w-3.5 mr-1" />
               {msg.reply_count} {msg.reply_count === 1 ? "reply" : "replies"}
+              {isExpanded && socketModeActive && (
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse ml-1" title="Updating live" />
+              )}
               {isExpanded ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
             </Button>
           )}
@@ -3081,6 +3097,12 @@ function MessageCard({
 
         {isExpanded && (
           <div className="ml-4 pl-4 space-y-0 pt-2 border-l-2 border-border">
+            {socketModeActive && (
+              <div className="flex items-center gap-1.5 mb-1.5 text-xs text-green-600 dark:text-green-400 font-medium">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                Live — new replies appear automatically
+              </div>
+            )}
             {loadingReplies ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
