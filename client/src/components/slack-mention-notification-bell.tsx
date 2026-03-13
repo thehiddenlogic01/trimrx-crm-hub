@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Bell, MessageCircle, ChevronRight } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Bell, MessageCircle, ChevronRight, Send, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 
 const SEEN_KEY = "slack_mention_notifications_seen";
 
@@ -126,11 +129,23 @@ function snippetText(text: string, maxLen = 80): string {
   return clean;
 }
 
+const CHANNEL_ID = "C09KBS41YHH";
+
 export function SlackMentionNotificationBell() {
   const [seenIds, setSeenIds] = useState<Set<string>>(getSeenIds);
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [selectedNotif, setSelectedNotif] = useState<MentionNotification | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [replyText, setReplyText] = useState("");
+
+  const replyMutation = useMutation({
+    mutationFn: async ({ threadTs, text }: { threadTs: string; text: string }) => {
+      return apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { threadTs, text });
+    },
+    onSuccess: () => {
+      setReplyText("");
+    },
+  });
 
   const { data } = useQuery<{ notifications: MentionNotification[]; users: Record<string, SlackUser> }>({
     queryKey: ["/api/slack/mention-notifications"],
@@ -157,9 +172,15 @@ export function SlackMentionNotificationBell() {
   const handleNotifClick = useCallback((notif: MentionNotification) => {
     markSeen(notif.id);
     setSelectedNotif(notif);
+    setReplyText("");
     setDialogOpen(true);
     setPopoverOpen(false);
   }, [markSeen]);
+
+  const handleSendReply = () => {
+    if (!replyText.trim() || !selectedNotif) return;
+    replyMutation.mutate({ threadTs: selectedNotif.thread_ts || selectedNotif.ts, text: replyText.trim() });
+  };
 
   useEffect(() => {
     if (notifications.length > 0 && seenIds.size > 0) {
@@ -345,6 +366,42 @@ export function SlackMentionNotificationBell() {
                   </div>
                 </div>
               )}
+
+              <div className="border-t pt-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Send className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">Reply in thread</span>
+                </div>
+                <div className="flex gap-2">
+                  <Textarea
+                    value={replyText}
+                    onChange={(e) => setReplyText(e.target.value)}
+                    placeholder="Type your reply..."
+                    className="text-sm resize-none min-h-[72px]"
+                    data-testid="textarea-mention-reply"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        handleSendReply();
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex justify-end mt-2">
+                  <Button
+                    size="sm"
+                    onClick={handleSendReply}
+                    disabled={!replyText.trim() || replyMutation.isPending}
+                    data-testid="button-send-mention-reply"
+                  >
+                    {replyMutation.isPending ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Sending...</>
+                    ) : (
+                      <><Send className="h-3.5 w-3.5 mr-1.5" />Send Reply</>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
