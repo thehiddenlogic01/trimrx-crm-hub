@@ -13,6 +13,34 @@ let socketModeActive = false;
 
 const sseClients: Set<Response> = new Set();
 
+const apiStats = {
+  startedAt: Date.now(),
+  slackApiCalls: 0,
+  queuePeak: 0,
+  slackApiCallsByType: {} as Record<string, number>,
+  cacheHits: 0,
+  cacheMisses: 0,
+  perUser: {} as Record<string, {
+    requests: number;
+    cacheHits: number;
+    cacheMisses: number;
+    slackCalls: number;
+    lastSeen: number;
+  }>,
+};
+
+function trackUser(username: string, hit: boolean, madeSlackCall: boolean) {
+  if (!apiStats.perUser[username]) {
+    apiStats.perUser[username] = { requests: 0, cacheHits: 0, cacheMisses: 0, slackCalls: 0, lastSeen: 0 };
+  }
+  const u = apiStats.perUser[username];
+  u.requests++;
+  u.lastSeen = Date.now();
+  if (hit) { u.cacheHits++; apiStats.cacheHits++; }
+  else { u.cacheMisses++; apiStats.cacheMisses++; }
+  if (madeSlackCall) u.slackCalls++;
+}
+
 function broadcastSlackEvent(event: { type: string; channelId: string; ts?: string; threadTs?: string }) {
   const data = JSON.stringify(event);
   for (const client of sseClients) {
@@ -63,10 +91,14 @@ const slackQueue: (() => Promise<void>)[] = [];
 let activeSlackCalls = 0;
 const MAX_CONCURRENT_SLACK = 3;
 
-function enqueueSlackCall<T>(fn: () => Promise<T>): Promise<T> {
+function enqueueSlackCall<T>(fn: () => Promise<T>, type = "other"): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const run = async () => {
       activeSlackCalls++;
+      apiStats.slackApiCalls++;
+      apiStats.slackApiCallsByType[type] = (apiStats.slackApiCallsByType[type] || 0) + 1;
+      const depth = slackQueue.length + activeSlackCalls;
+      if (depth > apiStats.queuePeak) apiStats.queuePeak = depth;
       try {
         resolve(await fn());
       } catch (e) {
@@ -331,10 +363,13 @@ export function setupSlackRoutes(app: Express) {
       const dateStr = req.query.date as string | undefined;
       const forceRefresh = req.query.force === "1";
 
+      const msgUsername = (req as any).user?.username || "anonymous";
+
       if (dateStr) {
         const cacheKey = `${channelId}:${dateStr}`;
         const cached = dateCache[cacheKey];
         if (!forceRefresh && cached && (Date.now() - cached.fetchedAt) < DATE_CACHE_TTL) {
+          trackUser(msgUsername, true, false);
           return res.json(cached.data);
         }
 
@@ -346,6 +381,7 @@ export function setupSlackRoutes(app: Express) {
         const oldest = String(dayStart.getTime() / 1000);
         const latest = String(dayEnd.getTime() / 1000);
 
+        trackUser(msgUsername, false, true);
         let allRawMessages: any[] = [];
         let cursor: string | undefined;
         let page = 0;
@@ -389,6 +425,7 @@ export function setupSlackRoutes(app: Express) {
         return;
       }
 
+      trackUser(msgUsername, false, true);
       const historyParams: any = { channel: channelId, limit: 50 };
       const result = await client.conversations.history(historyParams);
       const allRawMessages = result.messages || [];
@@ -427,16 +464,20 @@ export function setupSlackRoutes(app: Express) {
       const force = req.query.force === "1";
       const cacheKey = `${channelId}:${threadTs}`;
 
+      const username = (req as any).user?.username || "anonymous";
       const effectiveTTL = socketModeActive ? REPLY_CACHE_TTL_SOCKET : REPLY_CACHE_TTL;
       if (!force && replyCache[cacheKey] && Date.now() - replyCache[cacheKey].fetchedAt < effectiveTTL) {
+        trackUser(username, true, false);
         return res.json(replyCache[cacheKey].data);
       }
 
       if (!force && replyInFlight[cacheKey]) {
+        trackUser(username, true, false);
         const messages = await replyInFlight[cacheKey];
         return res.json(messages);
       }
 
+      trackUser(username, false, true);
       const userClient = await getUserSlackClient();
       const client = userClient || botClient;
 
@@ -444,7 +485,7 @@ export function setupSlackRoutes(app: Express) {
         channel: channelId,
         ts: threadTs,
         limit: 100,
-      })).then((result: any) => {
+      }), "replies").then((result: any) => {
         const messages = (result.messages || []).slice(1).map((msg: any) => ({
           ts: msg.ts,
           user: msg.user,
@@ -1493,6 +1534,53 @@ export function setupSlackRoutes(app: Express) {
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to delete template" });
     }
+  });
+
+  app.get("/api/slack/api-stats", async (req, res) => {
+    const total = apiStats.cacheHits + apiStats.cacheMisses;
+    const hitRate = total > 0 ? +((apiStats.cacheHits / total) * 100).toFixed(1) : 0;
+    const perUserArr = Object.entries(apiStats.perUser).map(([username, u]) => {
+      const ut = u.cacheHits + u.cacheMisses;
+      return {
+        username,
+        requests: u.requests,
+        cacheHits: u.cacheHits,
+        cacheMisses: u.cacheMisses,
+        hitRate: ut > 0 ? +((u.cacheHits / ut) * 100).toFixed(1) : 0,
+        slackCalls: u.slackCalls,
+        lastSeen: u.lastSeen,
+      };
+    }).sort((a, b) => b.requests - a.requests);
+
+    return res.json({
+      startedAt: apiStats.startedAt,
+      uptime: Date.now() - apiStats.startedAt,
+      slackApiCalls: apiStats.slackApiCalls,
+      slackApiCallsByType: apiStats.slackApiCallsByType,
+      cacheHits: apiStats.cacheHits,
+      cacheMisses: apiStats.cacheMisses,
+      hitRate,
+      total,
+      queue: {
+        active: activeSlackCalls,
+        pending: slackQueue.length,
+        peak: apiStats.queuePeak,
+        maxConcurrent: MAX_CONCURRENT_SLACK,
+      },
+      socketModeActive,
+      perUser: perUserArr,
+    });
+  });
+
+  app.post("/api/slack/api-stats/reset", async (_req, res) => {
+    apiStats.slackApiCalls = 0;
+    apiStats.queuePeak = 0;
+    apiStats.slackApiCallsByType = {};
+    apiStats.cacheHits = 0;
+    apiStats.cacheMisses = 0;
+    apiStats.perUser = {};
+    apiStats.startedAt = Date.now();
+    return res.json({ ok: true });
   });
 
   async function stopSocketMode() {

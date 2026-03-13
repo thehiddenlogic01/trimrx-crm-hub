@@ -25,6 +25,7 @@ export const APP_PAGES: Record<string, string> = {
   "/settings": "Settings",
   "/admin/settings": "Admin Settings",
   "/admin/audit-report": "Audit Report",
+  "/admin/api-limits": "API Limits",
   "/database/pt-finder": "PT Finder",
   "/database/stripe-payments": "Stripe Payment Details",
   "/trimrx/slack-backlog-all": "Slack Backlog All",
@@ -78,6 +79,7 @@ export const APP_SECTIONS = [
       "/admin/settings",
       "/admin/audit-report",
       "/admin/alerts",
+      "/admin/api-limits",
     ],
   },
 ] as const;
