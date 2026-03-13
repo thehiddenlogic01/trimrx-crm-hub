@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { APP_SECTIONS, hasSectionAccess, hasPageAccess } from "@shared/sections";
+import { SlackMentionNotificationBell } from "@/components/slack-mention-notification-bell";
 
 const trimrxMenu = [
   { title: "CV Support", url: "/trimrx/cv-support", icon: HeadsetIcon },
@@ -195,6 +196,9 @@ export function AppSidebar() {
           <div className="flex flex-col min-w-0">
             <span className="font-bold text-sm text-sidebar-foreground truncate tracking-tight">TrimRX</span>
             <span className="text-[11px] text-muted-foreground truncate">CRM Workspace</span>
+          </div>
+          <div className="ml-auto">
+            <SlackMentionNotificationBell />
           </div>
         </div>
       </SidebarHeader>

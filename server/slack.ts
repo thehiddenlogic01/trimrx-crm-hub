@@ -1277,6 +1277,150 @@ export function setupSlackRoutes(app: Express) {
     }
   });
 
+  let mentionNotifCache: { data: { notifications: any[]; users: Record<string, any> } | null; fetchedAt: number } = { data: null, fetchedAt: 0 };
+  const MENTION_NOTIF_CACHE_TTL = 60 * 1000;
+
+  app.get("/api/slack/mention-notifications", async (req, res) => {
+    const client = await requireSlack(req, res);
+    if (!client) return;
+    try {
+      const now = Date.now();
+      if (mentionNotifCache.data && (now - mentionNotifCache.fetchedAt) < MENTION_NOTIF_CACHE_TTL) {
+        return res.json(mentionNotifCache.data);
+      }
+
+      const channelId = "C09KBS41YHH";
+
+      let users: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
+      if (usersCache && (Date.now() - usersCache.fetchedAt) < USERS_CACHE_TTL) {
+        users = usersCache.data;
+      } else {
+        const allUsers: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
+        let cursor: string | undefined = undefined;
+        do {
+          const result: any = await client.users.list({ limit: 200, cursor });
+          for (const member of result.members || []) {
+            if (member.id) {
+              allUsers[member.id] = {
+                name: member.name || member.id,
+                real_name: member.real_name || member.profile?.real_name || member.name || member.id,
+                display_name: member.profile?.display_name || "",
+                avatar: member.profile?.image_48 || "",
+              };
+            }
+          }
+          cursor = result.response_metadata?.next_cursor;
+        } while (cursor);
+        usersCache = { data: allUsers, fetchedAt: Date.now() };
+        users = allUsers;
+      }
+
+      const targetIds: { userId: string; label: string }[] = [];
+      for (const [id, u] of Object.entries(users)) {
+        const rn = (u.real_name || "").toLowerCase();
+        const dn = (u.display_name || "").toLowerCase();
+        const n = (u.name || "").toLowerCase();
+        const allNames = `${rn} ${dn} ${n}`;
+        if (allNames.includes("olia") && allNames.includes("orlowska")) {
+          targetIds.push({ userId: id, label: "Olia" });
+        } else if (allNames.includes("karla") && allNames.includes("garibay")) {
+          targetIds.push({ userId: id, label: "Karla" });
+        } else if (allNames.includes("ethan")) {
+          targetIds.push({ userId: id, label: "Ethan" });
+        }
+      }
+
+      const oldest48h = String((Date.now() - 48 * 60 * 60 * 1000) / 1000);
+      let allMessages: any[] = [];
+      let cursor2: string | undefined;
+      let page = 0;
+      do {
+        const params: any = { channel: channelId, limit: 200, oldest: oldest48h };
+        if (cursor2) params.cursor = cursor2;
+        const result = await client.conversations.history(params);
+        allMessages = allMessages.concat(result.messages || []);
+        cursor2 = result.has_more ? result.response_metadata?.next_cursor : undefined;
+        page++;
+      } while (cursor2 && page < 20);
+
+      const targetUserIdSet = new Map(targetIds.map(t => [t.userId, t.label]));
+
+      const notifications: any[] = [];
+
+      for (const msg of allMessages) {
+        const mentionMatches = (msg.text || "").matchAll(/<@([A-Za-z0-9]+)(?:\|[^>]*)?>/g);
+        const mentionedTargets: { userId: string; label: string }[] = [];
+        const seenMentionUsers = new Set<string>();
+        for (const match of mentionMatches) {
+          if (seenMentionUsers.has(match[1])) continue;
+          const label = targetUserIdSet.get(match[1]);
+          if (label) {
+            mentionedTargets.push({ userId: match[1], label });
+            seenMentionUsers.add(match[1]);
+          }
+        }
+
+        if (mentionedTargets.length === 0) continue;
+
+        let replies: any[] = [];
+        if (msg.reply_count && msg.reply_count > 0) {
+          try {
+            const replyResult = await enqueueSlackCall(() => client.conversations.replies({
+              channel: channelId,
+              ts: msg.ts,
+              limit: 100,
+            }));
+            replies = (replyResult.messages || []).slice(1).map((r: any) => ({
+              ts: r.ts,
+              user: r.user,
+              text: r.text || "",
+              bot_id: r.bot_id || null,
+              reactions: (r.reactions || []).map((rx: any) => ({
+                name: rx.name,
+                count: rx.count,
+                users: rx.users,
+              })),
+            }));
+          } catch {}
+        }
+
+        const senderInfo = users[msg.user] || { name: msg.user || "Unknown", real_name: msg.user || "Unknown", avatar: "", display_name: "" };
+
+        for (const target of mentionedTargets) {
+          notifications.push({
+            id: `${msg.ts}-${target.userId}`,
+            ts: msg.ts,
+            thread_ts: msg.thread_ts || msg.ts,
+            text: msg.text || "",
+            sender: {
+              id: msg.user,
+              name: senderInfo.real_name || senderInfo.name,
+              avatar: senderInfo.avatar,
+            },
+            mentionedPerson: target.label,
+            mentionedUserId: target.userId,
+            reactions: (msg.reactions || []).map((r: any) => ({
+              name: r.name,
+              count: r.count,
+              users: r.users,
+            })),
+            replies,
+            replyCount: msg.reply_count || 0,
+          });
+        }
+      }
+
+      notifications.sort((a, b) => Number(b.ts) - Number(a.ts));
+
+      const response = { notifications, users };
+      mentionNotifCache = { data: response, fetchedAt: Date.now() };
+
+      return res.json(response);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to fetch mention notifications" });
+    }
+  });
+
   app.delete("/api/slack/reply-templates/:id", async (req, res) => {
     try {
       const { id } = req.params;
