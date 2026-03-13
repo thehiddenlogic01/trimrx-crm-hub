@@ -165,7 +165,7 @@ export function SlackMentionNotificationBell() {
 
   const { data } = useQuery<{ notifications: MentionNotification[]; users: Record<string, SlackUser> }>({
     queryKey: ["/api/slack/mention-notifications"],
-    refetchInterval: 60000,
+    refetchInterval: 10 * 60 * 1000,
     staleTime: 30000,
     retry: 1,
   });

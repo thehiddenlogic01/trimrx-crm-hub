@@ -14,7 +14,9 @@ let socketModeActive = false;
 const sseClients: Set<Response> = new Set();
 
 const SLACK_RATE_LIMIT_PER_MIN = 50;
+const RATE_LIMIT_CAP = 40;
 const RATE_WINDOW_MS = 60_000;
+const CALL_TIMEOUT_MS = 35_000;
 
 const apiStats = {
   startedAt: Date.now(),
@@ -49,6 +51,26 @@ function callsInLastMinute(arr: number[], now = Date.now()): number {
     count++;
   }
   return count;
+}
+
+async function waitForRateLimit(): Promise<void> {
+  while (true) {
+    const now = Date.now();
+    pruneTimestamps(apiStats.slackCallTimestamps, now);
+    if (apiStats.slackCallTimestamps.length < RATE_LIMIT_CAP) return;
+    const oldest = apiStats.slackCallTimestamps[0];
+    const waitMs = oldest + RATE_WINDOW_MS - now + 100;
+    await new Promise((r) => setTimeout(r, Math.max(waitMs, 200)));
+  }
+}
+
+function withCallTimeout<T>(promise: Promise<T>): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Slack API call timed out")), CALL_TIMEOUT_MS)
+    ),
+  ]);
 }
 
 function trackUser(username: string, hit: boolean, madeSlackCall: boolean) {
@@ -121,6 +143,7 @@ const MAX_CONCURRENT_SLACK = 3;
 function enqueueSlackCall<T>(fn: () => Promise<T>, type = "other"): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const run = async () => {
+      await waitForRateLimit();
       activeSlackCalls++;
       apiStats.slackApiCalls++;
       apiStats.slackApiCallsByType[type] = (apiStats.slackApiCallsByType[type] || 0) + 1;
@@ -130,7 +153,7 @@ function enqueueSlackCall<T>(fn: () => Promise<T>, type = "other"): Promise<T> {
       apiStats.slackCallTimestamps.push(now);
       pruneTimestamps(apiStats.slackCallTimestamps, now);
       try {
-        resolve(await fn());
+        resolve(await withCallTimeout(fn()));
       } catch (e) {
         reject(e);
       } finally {
@@ -1410,7 +1433,7 @@ export function setupSlackRoutes(app: Express) {
   });
 
   let mentionNotifCache: { data: { notifications: any[]; users: Record<string, any> } | null; fetchedAt: number } = { data: null, fetchedAt: 0 };
-  const MENTION_NOTIF_CACHE_TTL = 60 * 1000;
+  const MENTION_NOTIF_CACHE_TTL = 10 * 60 * 1000;
 
   app.get("/api/slack/mention-notifications", async (req, res) => {
     const client = await requireSlack(req, res);
@@ -1496,24 +1519,11 @@ export function setupSlackRoutes(app: Express) {
 
         let replies: any[] = [];
         if (msg.reply_count && msg.reply_count > 0) {
-          try {
-            const replyResult = await enqueueSlackCall(() => client.conversations.replies({
-              channel: channelId,
-              ts: msg.ts,
-              limit: 100,
-            }));
-            replies = (replyResult.messages || []).slice(1).map((r: any) => ({
-              ts: r.ts,
-              user: r.user,
-              text: r.text || "",
-              bot_id: r.bot_id || null,
-              reactions: (r.reactions || []).map((rx: any) => ({
-                name: rx.name,
-                count: rx.count,
-                users: rx.users,
-              })),
-            }));
-          } catch {}
+          const cacheKey = `${channelId}:${msg.ts}`;
+          const cached = replyCache[cacheKey];
+          if (cached) {
+            replies = cached.messages;
+          }
         }
 
         const senderInfo = users[msg.user] || { name: msg.user || "Unknown", real_name: msg.user || "Unknown", avatar: "", display_name: "" };
