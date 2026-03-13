@@ -1707,13 +1707,15 @@ export default function SlackMessagesPage() {
     prefetchTimeoutsRef.current.forEach(clearTimeout);
     prefetchTimeoutsRef.current = [];
 
-    if (!dateFilter) return;
-
-    const toFetch = filteredMessages.filter(
+    const candidates = filteredMessages.filter(
       (msg) =>
         msg.reply_count > 0 &&
         !queryClient.getQueryData(["/api/slack/channels", CHANNEL_ID, "replies", msg.ts])
     );
+
+    const limit = dateFilter ? candidates.length : 15;
+    const stagger = dateFilter ? 1200 : 2000;
+    const toFetch = candidates.slice(0, limit);
 
     toFetch.forEach((msg, idx) => {
       const t = setTimeout(() => {
@@ -1724,9 +1726,9 @@ export default function SlackMessagesPage() {
             if (!res.ok) throw new Error("Failed to prefetch replies");
             return res.json() as Promise<ThreadReply[]>;
           },
-          staleTime: 15 * 60 * 1000,
+          staleTime: 5 * 60 * 1000,
         });
-      }, idx * 1200);
+      }, idx * stagger);
       prefetchTimeoutsRef.current.push(t);
     });
 
@@ -2638,7 +2640,7 @@ function MessageCard({
     },
     enabled: isExpanded && expandReady && msg.reply_count > 0,
     retry: 1,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
     refetchInterval: isExpanded ? 30000 : false,
   });
 
