@@ -45,6 +45,7 @@ import {
   Clock,
   AlertTriangle,
   HelpCircle,
+  ListChecks,
 } from "lucide-react";
 
 const CHANNEL_ID = "C09KBS41YHH";
@@ -863,6 +864,7 @@ export default function SlackMessagesPage() {
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+  const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
   const [replyFilters, setReplyFilters] = useState<string[]>([]);
   const [replyFilterLoading, setReplyFilterLoading] = useState(false);
   const [replyFilterMatchedMap, setReplyFilterMatchedMap] = useState<Record<string, Record<string, { matchedBy: string }>>>({});
@@ -1969,44 +1971,60 @@ export default function SlackMessagesPage() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          {can("slack-backlog-all", "bulk-done") && filteredMessages.length > 0 && Object.keys(cvStatusMap).length > 0 && (
-            <>
-              <label className="flex items-center gap-1.5 cursor-pointer text-sm select-none" data-testid="checkbox-select-all">
-                <input
-                  type="checkbox"
-                  checked={filteredMessages.length > 0 && filteredMessages.every((m) => selectedMessages.has(m.ts))}
-                  onChange={() => toggleSelectAll(filteredMessages)}
-                  className="h-4 w-4 rounded border-border accent-primary"
-                />
-                Select All ({selectedMessages.size}/{filteredMessages.length})
-              </label>
-              {selectedMessages.size > 0 && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => bulkOptionDone(filteredMessages)}
-                  disabled={bulkProcessing}
-                  className="bg-green-600 text-white"
-                  data-testid="button-bulk-option-done"
-                >
-                  {bulkProcessing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                      Processing {bulkProgress.done}/{bulkProgress.total}...
-                    </>
-                  ) : (
-                    <>
-                      <CheckSquare className="h-4 w-4 mr-1.5" />
-                      Bulk Option Done ({selectedMessages.size})
-                    </>
-                  )}
-                </Button>
-              )}
-            </>
-          )}
-          {can("slack-backlog-all", "send-to-cv") && filteredMessages.length > 0 && (
-            <SendToCvReportDialog messages={filteredMessages} dateFilter={dateFilter} />
-          )}
+          <Popover open={bulkActionsOpen} onOpenChange={setBulkActionsOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5" data-testid="button-bulk-actions">
+                <ListChecks className="h-4 w-4" />
+                Bulk Actions
+                <ChevronDown className="h-3 w-3 ml-0.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-2" data-testid="popover-bulk-actions">
+              <div className="space-y-1">
+                {can("slack-backlog-all", "bulk-done") && filteredMessages.length > 0 && Object.keys(cvStatusMap).length > 0 && (
+                  <>
+                    <label className="flex items-center gap-2 px-2 py-1.5 rounded text-sm cursor-pointer hover:bg-accent select-none" data-testid="checkbox-select-all">
+                      <input
+                        type="checkbox"
+                        checked={filteredMessages.length > 0 && filteredMessages.every((m) => selectedMessages.has(m.ts))}
+                        onChange={() => toggleSelectAll(filteredMessages)}
+                        className="h-3.5 w-3.5 rounded border-border accent-primary"
+                      />
+                      Select All ({selectedMessages.size}/{filteredMessages.length})
+                    </label>
+                    {selectedMessages.size > 0 && (
+                      <button
+                        onClick={() => { bulkOptionDone(filteredMessages); setBulkActionsOpen(false); }}
+                        disabled={bulkProcessing}
+                        className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-sm text-left hover:bg-accent disabled:opacity-50"
+                        data-testid="button-bulk-option-done"
+                      >
+                        {bulkProcessing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin text-green-600" />
+                            Processing {bulkProgress.done}/{bulkProgress.total}...
+                          </>
+                        ) : (
+                          <>
+                            <CheckSquare className="h-4 w-4 text-green-600" />
+                            Bulk Option Done ({selectedMessages.size})
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </>
+                )}
+                {can("slack-backlog-all", "send-to-cv") && filteredMessages.length > 0 && (
+                  <div className="px-0">
+                    <SendToCvReportDialog messages={filteredMessages} dateFilter={dateFilter} />
+                  </div>
+                )}
+                {(!can("slack-backlog-all", "bulk-done") || filteredMessages.length === 0) && (!can("slack-backlog-all", "send-to-cv") || filteredMessages.length === 0) && (
+                  <p className="text-xs text-muted-foreground px-2 py-3 text-center">No bulk actions available</p>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
           {can("slack-backlog-all", "top-toolbar-tools") && (
             <>
               <Button
