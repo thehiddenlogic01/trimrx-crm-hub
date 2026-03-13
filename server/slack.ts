@@ -13,10 +13,14 @@ let socketModeActive = false;
 
 const sseClients: Set<Response> = new Set();
 
+const SLACK_RATE_LIMIT_PER_MIN = 50;
+const RATE_WINDOW_MS = 60_000;
+
 const apiStats = {
   startedAt: Date.now(),
   slackApiCalls: 0,
   queuePeak: 0,
+  slackCallTimestamps: [] as number[],
   slackApiCallsByType: {} as Record<string, number>,
   cacheHits: 0,
   cacheMisses: 0,
@@ -25,20 +29,43 @@ const apiStats = {
     cacheHits: number;
     cacheMisses: number;
     slackCalls: number;
+    slackCallTimestamps: number[];
     lastSeen: number;
   }>,
 };
 
+function pruneTimestamps(arr: number[], now = Date.now()) {
+  const cutoff = now - RATE_WINDOW_MS;
+  let i = 0;
+  while (i < arr.length && arr[i] < cutoff) i++;
+  if (i > 0) arr.splice(0, i);
+}
+
+function callsInLastMinute(arr: number[], now = Date.now()): number {
+  const cutoff = now - RATE_WINDOW_MS;
+  let count = 0;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i] < cutoff) break;
+    count++;
+  }
+  return count;
+}
+
 function trackUser(username: string, hit: boolean, madeSlackCall: boolean) {
   if (!apiStats.perUser[username]) {
-    apiStats.perUser[username] = { requests: 0, cacheHits: 0, cacheMisses: 0, slackCalls: 0, lastSeen: 0 };
+    apiStats.perUser[username] = { requests: 0, cacheHits: 0, cacheMisses: 0, slackCalls: 0, slackCallTimestamps: [], lastSeen: 0 };
   }
   const u = apiStats.perUser[username];
   u.requests++;
   u.lastSeen = Date.now();
   if (hit) { u.cacheHits++; apiStats.cacheHits++; }
   else { u.cacheMisses++; apiStats.cacheMisses++; }
-  if (madeSlackCall) u.slackCalls++;
+  if (madeSlackCall) {
+    u.slackCalls++;
+    const now = Date.now();
+    u.slackCallTimestamps.push(now);
+    pruneTimestamps(u.slackCallTimestamps, now);
+  }
 }
 
 function broadcastSlackEvent(event: { type: string; channelId: string; ts?: string; threadTs?: string }) {
@@ -99,6 +126,9 @@ function enqueueSlackCall<T>(fn: () => Promise<T>, type = "other"): Promise<T> {
       apiStats.slackApiCallsByType[type] = (apiStats.slackApiCallsByType[type] || 0) + 1;
       const depth = slackQueue.length + activeSlackCalls;
       if (depth > apiStats.queuePeak) apiStats.queuePeak = depth;
+      const now = Date.now();
+      apiStats.slackCallTimestamps.push(now);
+      pruneTimestamps(apiStats.slackCallTimestamps, now);
       try {
         resolve(await fn());
       } catch (e) {
@@ -1537,10 +1567,15 @@ export function setupSlackRoutes(app: Express) {
   });
 
   app.get("/api/slack/api-stats", async (req, res) => {
+    const now = Date.now();
+    pruneTimestamps(apiStats.slackCallTimestamps, now);
+    const callsLastMinute = callsInLastMinute(apiStats.slackCallTimestamps, now);
+
     const total = apiStats.cacheHits + apiStats.cacheMisses;
     const hitRate = total > 0 ? +((apiStats.cacheHits / total) * 100).toFixed(1) : 0;
     const perUserArr = Object.entries(apiStats.perUser).map(([username, u]) => {
       const ut = u.cacheHits + u.cacheMisses;
+      pruneTimestamps(u.slackCallTimestamps, now);
       return {
         username,
         requests: u.requests,
@@ -1548,19 +1583,25 @@ export function setupSlackRoutes(app: Express) {
         cacheMisses: u.cacheMisses,
         hitRate: ut > 0 ? +((u.cacheHits / ut) * 100).toFixed(1) : 0,
         slackCalls: u.slackCalls,
+        slackCallsLastMinute: callsInLastMinute(u.slackCallTimestamps, now),
         lastSeen: u.lastSeen,
       };
     }).sort((a, b) => b.requests - a.requests);
 
     return res.json({
       startedAt: apiStats.startedAt,
-      uptime: Date.now() - apiStats.startedAt,
+      uptime: now - apiStats.startedAt,
       slackApiCalls: apiStats.slackApiCalls,
       slackApiCallsByType: apiStats.slackApiCallsByType,
       cacheHits: apiStats.cacheHits,
       cacheMisses: apiStats.cacheMisses,
       hitRate,
       total,
+      rateLimit: {
+        callsLastMinute,
+        limit: SLACK_RATE_LIMIT_PER_MIN,
+        usagePct: +((callsLastMinute / SLACK_RATE_LIMIT_PER_MIN) * 100).toFixed(1),
+      },
       queue: {
         active: activeSlackCalls,
         pending: slackQueue.length,
@@ -1575,6 +1616,7 @@ export function setupSlackRoutes(app: Express) {
   app.post("/api/slack/api-stats/reset", async (_req, res) => {
     apiStats.slackApiCalls = 0;
     apiStats.queuePeak = 0;
+    apiStats.slackCallTimestamps = [];
     apiStats.slackApiCallsByType = {};
     apiStats.cacheHits = 0;
     apiStats.cacheMisses = 0;

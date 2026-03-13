@@ -3,7 +3,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, RefreshCw, Zap, Database, Users, Activity, Wifi, WifiOff, RotateCcw, TrendingUp, AlertTriangle } from "lucide-react";
+import { Loader2, RefreshCw, Zap, Database, Users, Activity, Wifi, WifiOff, RotateCcw, TrendingUp, AlertTriangle, Gauge } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ApiStatsResponse {
@@ -15,6 +15,11 @@ interface ApiStatsResponse {
   cacheMisses: number;
   hitRate: number;
   total: number;
+  rateLimit: {
+    callsLastMinute: number;
+    limit: number;
+    usagePct: number;
+  };
   queue: {
     active: number;
     pending: number;
@@ -29,6 +34,7 @@ interface ApiStatsResponse {
     cacheMisses: number;
     hitRate: number;
     slackCalls: number;
+    slackCallsLastMinute: number;
     lastSeen: number;
   }[];
 }
@@ -64,6 +70,52 @@ function HitRateBar({ rate }: { rate: number }) {
       </div>
       <span className="text-xs tabular-nums w-10 text-right">{rate}%</span>
     </div>
+  );
+}
+
+function RateLimitGauge({ calls, limit, pct }: { calls: number; limit: number; pct: number }) {
+  const isRed = pct >= 90;
+  const isYellow = pct >= 70;
+  const barColor = isRed ? "bg-red-500" : isYellow ? "bg-yellow-500" : "bg-green-500";
+  const textColor = isRed ? "text-red-600 dark:text-red-400" : isYellow ? "text-yellow-600 dark:text-yellow-400" : "text-green-600 dark:text-green-400";
+  const bgColor = isRed
+    ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
+    : isYellow
+      ? "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800"
+      : "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800";
+
+  return (
+    <Card className={`border ${bgColor}`} data-testid="card-rate-limit">
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
+          <Gauge className="h-3.5 w-3.5" /> Slack API — Last 60 Seconds
+        </div>
+        <div className="flex items-baseline gap-1.5 mb-2">
+          <span className={`text-3xl font-bold tabular-nums ${textColor}`}>{calls}</span>
+          <span className="text-lg text-muted-foreground font-medium">/ {limit}</span>
+          <span className="text-xs text-muted-foreground ml-1">calls</span>
+        </div>
+        <div className="h-2.5 rounded-full bg-muted overflow-hidden mb-1.5">
+          <div
+            className={`h-full rounded-full ${barColor} transition-all duration-700`}
+            style={{ width: `${Math.min(pct, 100)}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center">
+          <span className={`text-xs font-medium ${textColor}`}>
+            {pct}% of limit used
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {limit - calls} remaining
+          </span>
+        </div>
+        {isRed && (
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-red-700 dark:text-red-300 font-medium">
+            <AlertTriangle className="h-3 w-3" /> Approaching rate limit!
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -134,25 +186,19 @@ export default function ApiLimitsPage() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card data-testid="card-uptime">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <Activity className="h-3.5 w-3.5" /> Server Uptime
-            </div>
-            <div className="text-2xl font-bold">{formatUptime(s.uptime)}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              since {new Date(s.startedAt).toLocaleTimeString()}
-            </div>
-          </CardContent>
-        </Card>
+        <RateLimitGauge
+          calls={s.rateLimit?.callsLastMinute ?? 0}
+          limit={s.rateLimit?.limit ?? 50}
+          pct={s.rateLimit?.usagePct ?? 0}
+        />
 
         <Card data-testid="card-slack-calls">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <Zap className="h-3.5 w-3.5" /> Slack API Calls
+              <Zap className="h-3.5 w-3.5" /> Total Slack API Calls
             </div>
             <div className="text-2xl font-bold">{s.slackApiCalls.toLocaleString()}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">actual calls to Slack</div>
+            <div className="text-xs text-muted-foreground mt-0.5">since last reset</div>
           </CardContent>
         </Card>
 
@@ -171,20 +217,14 @@ export default function ApiLimitsPage() {
           </CardContent>
         </Card>
 
-        <Card data-testid="card-queue">
+        <Card data-testid="card-uptime">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-              <TrendingUp className="h-3.5 w-3.5" /> Queue Status
+              <Activity className="h-3.5 w-3.5" /> Server Uptime
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold">{s.queue.active}</span>
-              <span className="text-xs text-muted-foreground">active</span>
-              {s.queue.pending > 0 && (
-                <Badge variant="secondary" className="text-xs">{s.queue.pending} waiting</Badge>
-              )}
-            </div>
+            <div className="text-2xl font-bold">{formatUptime(s.uptime)}</div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              peak {s.queue.peak} · max {s.queue.maxConcurrent} concurrent
+              since {new Date(s.startedAt).toLocaleTimeString()}
             </div>
           </CardContent>
         </Card>
@@ -220,6 +260,18 @@ export default function ApiLimitsPage() {
               ) : (
                 <Badge variant="outline" className="text-muted-foreground">Offline</Badge>
               )}
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">Queue</p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.queue.active} active · {s.queue.pending} waiting · peak {s.queue.peak}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">max {s.queue.maxConcurrent} concurrent</span>
             </div>
             {!s.socketModeActive && (
               <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 text-xs text-yellow-800 dark:text-yellow-300">
@@ -285,6 +337,7 @@ export default function ApiLimitsPage() {
                     <th className="text-right pb-2 pr-4 font-medium">Cache Hits</th>
                     <th className="text-right pb-2 pr-4 font-medium">Cache Misses</th>
                     <th className="text-right pb-2 pr-4 font-medium">Slack Calls</th>
+                    <th className="text-right pb-2 pr-4 font-medium whitespace-nowrap">Last 60s</th>
                     <th className="pb-2 pr-4 font-medium">Hit Rate</th>
                     <th className="text-right pb-2 font-medium">Last Active</th>
                   </tr>
@@ -301,6 +354,19 @@ export default function ApiLimitsPage() {
                           <span className="text-orange-500 font-medium">{u.slackCalls.toLocaleString()}</span>
                         ) : (
                           <span className="text-muted-foreground">0</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-4 text-right tabular-nums">
+                        {u.slackCallsLastMinute > 0 ? (
+                          <Badge
+                            variant="secondary"
+                            className={`text-xs tabular-nums ${u.slackCallsLastMinute >= 10 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300" : ""}`}
+                            data-testid={`badge-lastmin-${u.username}`}
+                          >
+                            {u.slackCallsLastMinute}/min
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
                         )}
                       </td>
                       <td className="py-2.5 pr-4">
