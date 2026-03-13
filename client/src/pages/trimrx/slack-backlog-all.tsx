@@ -2037,6 +2037,30 @@ export default function SlackMessagesPage() {
             <PopoverContent align="end" className="w-72 p-1" data-testid="popover-bulk-actions">
               <div className="space-y-0.5">
                 <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Bulk Operations</p>
+                <button
+                  onClick={() => { setBulkActionsOpen(false); }}
+                  className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent transition-colors"
+                  data-testid="button-mark-done-no-comments"
+                >
+                  <CheckCircle className="h-4 w-4 shrink-0 text-green-600" />
+                  <span>Mark As Done no comments</span>
+                </button>
+                <button
+                  onClick={() => { setBulkActionsOpen(false); }}
+                  className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent transition-colors"
+                  data-testid="button-mark-done-close-case"
+                >
+                  <XCircle className="h-4 w-4 shrink-0 text-blue-600" />
+                  <span>Mark Done Close Case</span>
+                </button>
+                <button
+                  onClick={() => { setBulkActionsOpen(false); }}
+                  className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent transition-colors"
+                  data-testid="button-mark-done-refund-requested"
+                >
+                  <DollarSign className="h-4 w-4 shrink-0 text-orange-500" />
+                  <span>Mark Done Refund Requested</span>
+                </button>
               </div>
             </PopoverContent>
           </Popover>
