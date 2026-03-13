@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import {
+  LayoutDashboard,
   Settings,
   Zap,
   LogOut,
@@ -201,6 +202,25 @@ export function AppSidebar() {
       <SidebarSeparator />
 
       <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  data-active={location === "/"}
+                  data-testid="nav-dashboard"
+                >
+                  <Link href="/">
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {sections
           .filter((section) => hasSectionAccess(role, permissions, section.key))
           .map((section) => {
