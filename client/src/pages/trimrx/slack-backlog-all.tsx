@@ -1890,28 +1890,6 @@ export default function SlackMessagesPage() {
       </div>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          {can("slack-backlog-all", "check-cv-status") && (
-            <Button
-              variant={Object.keys(cvStatusMap).length > 0 ? "default" : "outline"}
-              size="sm"
-              onClick={checkCvStatus}
-              disabled={cvStatusLoading || !messages || messages.length === 0}
-              data-testid="button-check-cv-status"
-            >
-              {cvStatusLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-1.5" />}
-              Check CV Status
-            </Button>
-          )}
-          <Button
-            variant={Object.keys(trackerMatchMap).length > 0 ? "default" : "outline"}
-            size="sm"
-            onClick={matchTrackerData}
-            disabled={trackerMatchLoading || !messages || messages.length === 0}
-            data-testid="button-match-data"
-          >
-            {trackerMatchLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Database className="h-4 w-4 mr-1.5" />}
-            Match Data
-          </Button>
           {Object.keys(cvStatusMap).length > 0 && (
             <>
               <Select value={cvFilter} onValueChange={setCvFilter}>
@@ -1979,11 +1957,76 @@ export default function SlackMessagesPage() {
                 <ChevronDown className="h-3 w-3 ml-0.5" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-2" data-testid="popover-bulk-actions">
-              <div className="space-y-1">
+            <PopoverContent align="end" className="w-80 p-1" data-testid="popover-bulk-actions">
+              <div className="space-y-0.5">
+                <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Data & Sync</p>
+                {can("slack-backlog-all", "check-cv-status") && (
+                  <button
+                    onClick={() => { checkCvStatus(); setBulkActionsOpen(false); }}
+                    disabled={cvStatusLoading || !messages || messages.length === 0}
+                    className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
+                    data-testid="button-check-cv-status"
+                  >
+                    {cvStatusLoading ? <Loader2 className="h-4 w-4 animate-spin shrink-0" /> : <FileSpreadsheet className="h-4 w-4 shrink-0" />}
+                    <span>Check CV Status</span>
+                    {Object.keys(cvStatusMap).length > 0 && <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">Active</Badge>}
+                  </button>
+                )}
+                <button
+                  onClick={() => { matchTrackerData(); setBulkActionsOpen(false); }}
+                  disabled={trackerMatchLoading || !messages || messages.length === 0}
+                  className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
+                  data-testid="button-match-data"
+                >
+                  {trackerMatchLoading ? <Loader2 className="h-4 w-4 animate-spin shrink-0" /> : <Database className="h-4 w-4 shrink-0" />}
+                  <span>Match Data</span>
+                  {Object.keys(trackerMatchMap).length > 0 && <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">Active</Badge>}
+                </button>
+                {can("slack-backlog-all", "top-toolbar-tools") && (
+                  <>
+                    <button
+                      onClick={() => { handleCheckAllPayments(); setBulkActionsOpen(false); }}
+                      disabled={paymentsLoading}
+                      className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
+                      data-testid="button-check-all-payments"
+                    >
+                      {paymentsLoading ? (
+                        <><Loader2 className="h-4 w-4 animate-spin shrink-0" /><span>Checking... ({paymentsProgress.done}/{paymentsProgress.total})</span></>
+                      ) : (
+                        <><CreditCard className="h-4 w-4 shrink-0" /><span>Check all Payments</span></>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => { handleSyncDataCv(); setBulkActionsOpen(false); }}
+                      disabled={cvSyncLoading}
+                      className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
+                      data-testid="button-sync-data-cv"
+                    >
+                      {cvSyncLoading ? (
+                        <><Loader2 className="h-4 w-4 animate-spin shrink-0" /><span>Syncing... ({cvSyncProgress.done}/{cvSyncProgress.total})</span></>
+                      ) : (
+                        <><Database className="h-4 w-4 shrink-0" /><span>Sync Data CV</span></>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => { matchTrackerData(); setBulkActionsOpen(false); }}
+                      disabled={trackerMatchLoading}
+                      className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
+                      data-testid="button-tracker-data-sync"
+                    >
+                      {trackerMatchLoading ? (
+                        <><Loader2 className="h-4 w-4 animate-spin shrink-0" /><span>Syncing...</span></>
+                      ) : (
+                        <><FileSpreadsheet className="h-4 w-4 shrink-0" /><span>Tracker Data Sync</span></>
+                      )}
+                    </button>
+                  </>
+                )}
+                <div className="border-t border-border my-1" />
+                <p className="px-2.5 pt-1 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Bulk Operations</p>
                 {can("slack-backlog-all", "bulk-done") && filteredMessages.length > 0 && Object.keys(cvStatusMap).length > 0 && (
                   <>
-                    <label className="flex items-center gap-2 px-2 py-1.5 rounded text-sm cursor-pointer hover:bg-accent select-none" data-testid="checkbox-select-all">
+                    <label className="flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm cursor-pointer hover:bg-accent select-none transition-colors" data-testid="checkbox-select-all">
                       <input
                         type="checkbox"
                         checked={filteredMessages.length > 0 && filteredMessages.every((m) => selectedMessages.has(m.ts))}
@@ -1996,19 +2039,13 @@ export default function SlackMessagesPage() {
                       <button
                         onClick={() => { bulkOptionDone(filteredMessages); setBulkActionsOpen(false); }}
                         disabled={bulkProcessing}
-                        className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-sm text-left hover:bg-accent disabled:opacity-50"
+                        className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
                         data-testid="button-bulk-option-done"
                       >
                         {bulkProcessing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin text-green-600" />
-                            Processing {bulkProgress.done}/{bulkProgress.total}...
-                          </>
+                          <><Loader2 className="h-4 w-4 animate-spin text-green-600 shrink-0" /><span>Processing {bulkProgress.done}/{bulkProgress.total}...</span></>
                         ) : (
-                          <>
-                            <CheckSquare className="h-4 w-4 text-green-600" />
-                            Bulk Option Done ({selectedMessages.size})
-                          </>
+                          <><CheckSquare className="h-4 w-4 text-green-600 shrink-0" /><span>Bulk Option Done ({selectedMessages.size})</span></>
                         )}
                       </button>
                     )}
@@ -2019,73 +2056,9 @@ export default function SlackMessagesPage() {
                     <SendToCvReportDialog messages={filteredMessages} dateFilter={dateFilter} />
                   </div>
                 )}
-                {(!can("slack-backlog-all", "bulk-done") || filteredMessages.length === 0) && (!can("slack-backlog-all", "send-to-cv") || filteredMessages.length === 0) && (
-                  <p className="text-xs text-muted-foreground px-2 py-3 text-center">No bulk actions available</p>
-                )}
               </div>
             </PopoverContent>
           </Popover>
-          {can("slack-backlog-all", "top-toolbar-tools") && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="button-check-all-payments"
-                onClick={handleCheckAllPayments}
-                disabled={paymentsLoading}
-              >
-                {paymentsLoading ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                    Checking... ({paymentsProgress.done}/{paymentsProgress.total})
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="h-3.5 w-3.5 mr-1" />
-                    Check all Payments
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="button-sync-data-cv"
-                onClick={handleSyncDataCv}
-                disabled={cvSyncLoading}
-              >
-                {cvSyncLoading ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                    Syncing... ({cvSyncProgress.done}/{cvSyncProgress.total})
-                  </>
-                ) : (
-                  <>
-                    <Database className="h-3.5 w-3.5 mr-1" />
-                    Sync Data CV
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="button-tracker-data-sync"
-                onClick={matchTrackerData}
-                disabled={trackerMatchLoading}
-              >
-                {trackerMatchLoading ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1" />
-                    Tracker Data Sync
-                  </>
-                )}
-              </Button>
-            </>
-          )}
         </div>
       </div>
 
