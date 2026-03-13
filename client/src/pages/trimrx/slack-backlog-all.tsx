@@ -848,7 +848,7 @@ function NeedHelpButton({ msg, getUserName }: { msg: any; getUserName: (id: stri
 export default function SlackMessagesPage() {
   const { toast } = useToast();
   const { can } = usePermissions();
-  const [expandedThread, setExpandedThread] = useState<string | null>(null);
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const [expandAllReplies, setExpandAllReplies] = useState(false);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
@@ -2093,8 +2093,8 @@ export default function SlackMessagesPage() {
               getUserName={getUserName}
               getUserAvatar={getUserAvatar}
               users={users}
-              expandedThread={expandedThread}
-              setExpandedThread={setExpandedThread}
+              expandedThreads={expandedThreads}
+              setExpandedThreads={setExpandedThreads}
               expandAllReplies={expandAllReplies}
               replyText={replyText}
               setReplyText={setReplyText}
@@ -2423,8 +2423,8 @@ function MessageCard({
   getUserName,
   getUserAvatar,
   users,
-  expandedThread,
-  setExpandedThread,
+  expandedThreads,
+  setExpandedThreads,
   expandAllReplies,
   replyText,
   setReplyText,
@@ -2454,8 +2454,8 @@ function MessageCard({
   getUserName: (id: string) => string;
   getUserAvatar: (id: string) => string;
   users?: Record<string, SlackUser>;
-  expandedThread: string | null;
-  setExpandedThread: (ts: string | null) => void;
+  expandedThreads: Set<string>;
+  setExpandedThreads: React.Dispatch<React.SetStateAction<Set<string>>>;
   expandAllReplies?: boolean;
   expandIndex?: number;
   replyText: Record<string, string>;
@@ -2485,7 +2485,7 @@ function MessageCard({
   const { user } = useAuth();
   const { toast } = useToast();
   const threadTs = msg.thread_ts || msg.ts;
-  const isExpanded = expandAllReplies || expandedThread === msg.ts;
+  const isExpanded = expandAllReplies || expandedThreads.has(msg.ts);
   const isReplying = replyingTo === msg.ts;
   const checked = hasCheckmark(msg.reactions);
   const slackLink = `https://app.slack.com/client/${WORKSPACE_ID}/${channelId}/p${msg.ts.replace(".", "")}`;
@@ -3009,7 +3009,11 @@ function MessageCard({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setExpandedThread(isExpanded ? null : msg.ts)}
+              onClick={() => setExpandedThreads(prev => {
+                const next = new Set(prev);
+                if (next.has(msg.ts)) next.delete(msg.ts); else next.add(msg.ts);
+                return next;
+              })}
               data-testid={`button-thread-${msg.ts}`}
             >
               <MessageCircle className="h-3.5 w-3.5 mr-1" />
