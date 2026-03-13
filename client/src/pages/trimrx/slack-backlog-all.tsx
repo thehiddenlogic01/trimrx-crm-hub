@@ -980,7 +980,7 @@ export default function SlackMessagesPage() {
         const event = JSON.parse(ev.data);
         if (event.type === "connected") return;
         if (event.channelId !== CHANNEL_ID) return;
-        if (event.type === "react" || event.type === "unreact" || event.type === "delete") {
+        if (event.type === "react" || event.type === "unreact" || event.type === "delete" || event.type === "new_message") {
           queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "messages"] });
         }
         if (event.type === "reply" && event.threadTs) {

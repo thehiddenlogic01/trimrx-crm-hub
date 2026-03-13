@@ -1,10 +1,15 @@
 import { WebClient } from "@slack/web-api";
+import { SocketModeClient } from "@slack/socket-mode";
 import { type Express, type Request, type Response } from "express";
 import { storage } from "./storage";
 import { logAudit } from "./audit-logs";
 
 const SLACK_TOKEN_KEY = "slack_bot_token";
 const SLACK_USER_TOKEN_KEY = "slack_user_token";
+const SLACK_APP_TOKEN_KEY = "slack_app_token";
+
+let socketModeClient: SocketModeClient | null = null;
+let socketModeActive = false;
 
 const sseClients: Set<Response> = new Set();
 
@@ -90,8 +95,9 @@ export function setupSlackRoutes(app: Express) {
   app.get("/api/slack/status", async (_req, res) => {
     const token = await storage.getSetting(SLACK_TOKEN_KEY);
     const userToken = await storage.getSetting(SLACK_USER_TOKEN_KEY);
+    const appToken = await storage.getSetting(SLACK_APP_TOKEN_KEY);
     if (!token) {
-      return res.json({ connected: false, userTokenConnected: false });
+      return res.json({ connected: false, userTokenConnected: false, appTokenConnected: false, socketModeActive: false });
     }
     try {
       const client = getSlackClient(token);
@@ -113,9 +119,11 @@ export function setupSlackRoutes(app: Express) {
         teamId: auth.team_id,
         userTokenConnected: userTokenInfo.connected,
         userTokenUser: userTokenInfo.user,
+        appTokenConnected: !!appToken,
+        socketModeActive,
       });
     } catch {
-      return res.json({ connected: false, error: "Invalid token", userTokenConnected: false });
+      return res.json({ connected: false, error: "Invalid token", userTokenConnected: false, appTokenConnected: false, socketModeActive: false });
     }
   });
 
@@ -161,6 +169,26 @@ export function setupSlackRoutes(app: Express) {
     await storage.deleteSetting(SLACK_USER_TOKEN_KEY);
     cachedUserClient = null;
     return res.json({ connected: false });
+  });
+
+  app.post("/api/slack/connect-app-token", async (req, res) => {
+    const { token } = req.body;
+    if (!token || typeof token !== "string" || !token.startsWith("xapp-")) {
+      return res.status(400).json({ message: "Valid App-level Token (xapp-...) is required" });
+    }
+    try {
+      await storage.setSetting(SLACK_APP_TOKEN_KEY, token);
+      await startSocketMode(token);
+      return res.json({ connected: true, socketModeActive });
+    } catch (err: any) {
+      return res.status(400).json({ message: err.message || "Failed to connect Socket Mode" });
+    }
+  });
+
+  app.post("/api/slack/disconnect-app-token", async (_req, res) => {
+    await storage.deleteSetting(SLACK_APP_TOKEN_KEY);
+    await stopSocketMode();
+    return res.json({ connected: false, socketModeActive: false });
   });
 
   app.post("/api/slack/disconnect", async (_req, res) => {
@@ -1464,5 +1492,93 @@ export function setupSlackRoutes(app: Express) {
       return res.status(500).json({ message: err.message || "Failed to delete template" });
     }
   });
+
+  async function stopSocketMode() {
+    if (socketModeClient) {
+      try { await socketModeClient.disconnect(); } catch {}
+      socketModeClient = null;
+    }
+    socketModeActive = false;
+  }
+
+  async function startSocketMode(appToken: string) {
+    await stopSocketMode();
+    const client = new SocketModeClient({
+      appToken,
+      logLevel: "error" as any,
+    });
+
+    client.on("message", async ({ event, ack }: any) => {
+      try { await ack(); } catch {}
+      const channelId = event?.channel;
+      if (!channelId) return;
+
+      const threadTs: string | undefined = event.thread_ts;
+      const ts: string = event.ts;
+
+      if (threadTs && threadTs !== ts) {
+        const cacheKey = `${channelId}:${threadTs}`;
+        delete replyCache[cacheKey];
+        const cached = channelCache[channelId];
+        if (cached?.messages) {
+          const parent = cached.messages.find((m: any) => m.ts === threadTs);
+          if (parent) parent.reply_count = (parent.reply_count || 0) + 1;
+        }
+        for (const [key, entry] of Object.entries(dateCache)) {
+          if (key.startsWith(channelId + ":") && entry.data) {
+            const parent = entry.data.find((m: any) => m.ts === threadTs);
+            if (parent) parent.reply_count = (parent.reply_count || 0) + 1;
+          }
+        }
+        broadcastSlackEvent({ type: "reply", channelId, threadTs });
+      } else if (!event.subtype || event.subtype === "bot_message") {
+        if (channelCache[channelId]) {
+          channelCache[channelId].fetchedAt = 0;
+        }
+        const dayKey = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guatemala" });
+        const dateCacheKey = `${channelId}:${dayKey}`;
+        if (dateCache[dateCacheKey]) dateCache[dateCacheKey].fetchedAt = 0;
+        broadcastSlackEvent({ type: "new_message", channelId, ts });
+      }
+    });
+
+    client.on("reaction_added", async ({ event, ack }: any) => {
+      try { await ack(); } catch {}
+      const channelId = event?.item?.channel;
+      const ts = event?.item?.ts;
+      if (!channelId || !ts) return;
+      patchCachedReaction(channelId, ts, event.reaction, true);
+      broadcastSlackEvent({ type: "react", channelId, ts });
+    });
+
+    client.on("reaction_removed", async ({ event, ack }: any) => {
+      try { await ack(); } catch {}
+      const channelId = event?.item?.channel;
+      const ts = event?.item?.ts;
+      if (!channelId || !ts) return;
+      patchCachedReaction(channelId, ts, event.reaction, false);
+      broadcastSlackEvent({ type: "unreact", channelId, ts });
+    });
+
+    client.on("error" as any, (err: any) => {
+      console.error("[SocketMode] error:", err?.message || err);
+    });
+
+    await client.start();
+    socketModeClient = client;
+    socketModeActive = true;
+  }
+
+  (async () => {
+    try {
+      const appToken = await storage.getSetting(SLACK_APP_TOKEN_KEY);
+      if (appToken) {
+        await startSocketMode(appToken);
+        console.log("[SocketMode] Auto-started from saved token");
+      }
+    } catch (err: any) {
+      console.error("[SocketMode] Auto-start failed:", err?.message);
+    }
+  })();
 
 }

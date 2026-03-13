@@ -95,9 +95,11 @@ function SlackSection() {
   const { toast } = useToast();
   const [botToken, setBotToken] = useState("");
   const [userToken, setUserToken] = useState("");
+  const [appToken, setAppToken] = useState("");
 
-  const { data: status } = useQuery<{ connected: boolean; team?: string; botId?: string; userTokenConnected?: boolean }>({
+  const { data: status } = useQuery<{ connected: boolean; team?: string; botId?: string; userTokenConnected?: boolean; appTokenConnected?: boolean; socketModeActive?: boolean }>({
     queryKey: ["/api/slack/status"],
+    refetchInterval: 10000,
   });
 
   const connectMutation = useMutation({
@@ -139,6 +141,27 @@ function SlackSection() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/slack/status"] });
       toast({ title: "User token disconnected" });
+    },
+  });
+
+  const connectAppMutation = useMutation({
+    mutationFn: async (token: string) => {
+      const res = await apiRequest("POST", "/api/slack/connect-app-token", { token });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/status"] });
+      toast({ title: "Socket Mode activated", description: "Real-time updates are now live" });
+      setAppToken("");
+    },
+    onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const disconnectAppMutation = useMutation({
+    mutationFn: async () => { await apiRequest("POST", "/api/slack/disconnect-app-token", {}); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/status"] });
+      toast({ title: "Socket Mode disconnected" });
     },
   });
 
@@ -201,7 +224,7 @@ function SlackSection() {
         {connected && (
           <div className="space-y-2 pt-2 border-t">
             <Label className="text-sm font-medium">User Token (Optional)</Label>
-            <p className="text-xs text-muted-foreground">Enables workspace-wide fast search and access to private channels</p>
+            <p className="text-xs text-muted-foreground">Enables workspace-wide fast search and faster message fetching</p>
             {status?.userTokenConnected ? (
               <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
                 <div className="flex-1">
@@ -237,6 +260,70 @@ function SlackSection() {
                   {connectUserMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
                   Add
                 </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {connected && (
+          <div className="space-y-2 pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">Socket Mode — Real-time Updates</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Instantly syncs new messages, replies &amp; reactions from Slack to all users
+                </p>
+              </div>
+              {status?.socketModeActive && (
+                <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs shrink-0">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse" />
+                  Live
+                </Badge>
+              )}
+            </div>
+            {status?.appTokenConnected ? (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                <div className="flex-1">
+                  <p className="text-sm text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {status?.socketModeActive ? "Connected & receiving real-time events" : "Token saved — reconnecting…"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">App-level token (xapp-...) configured</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => disconnectAppMutation.mutate()}
+                  disabled={disconnectAppMutation.isPending}
+                  data-testid="button-disconnect-slack-app"
+                >
+                  {disconnectAppMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Unlink className="h-3.5 w-3.5 mr-1" />}
+                  Disconnect
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    placeholder="xapp-1-..."
+                    value={appToken}
+                    onChange={(e) => setAppToken(e.target.value)}
+                    data-testid="input-slack-app-token"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => connectAppMutation.mutate(appToken)}
+                    disabled={!appToken.trim() || connectAppMutation.isPending}
+                    data-testid="button-connect-slack-app"
+                  >
+                    {connectAppMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                    Activate
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Get this from <strong>api.slack.com/apps</strong> → Socket Mode → Generate App-level Token (scope: <code>connections:write</code>)
+                </p>
               </div>
             )}
           </div>
