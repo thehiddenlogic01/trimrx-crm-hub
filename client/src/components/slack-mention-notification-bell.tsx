@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Bell, MessageCircle, ChevronRight, Send, Loader2 } from "lucide-react";
+import { Bell, MessageCircle, ChevronRight, Send, Loader2, CheckSquare, XCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -146,6 +146,22 @@ export function SlackMentionNotificationBell() {
       setReplyText("");
     },
   });
+
+  const markDoneMutation = useMutation({
+    mutationFn: async (timestamp: string) => {
+      return apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/react`, { timestamp, name: "check_colorful" });
+    },
+  });
+
+  const unmarkDoneMutation = useMutation({
+    mutationFn: async (timestamp: string) => {
+      return apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/unreact`, { timestamp, name: "check_colorful" });
+    },
+  });
+
+  const isChecked = selectedNotif
+    ? selectedNotif.reactions.some((r) => r.name === "check_colorful" && r.count > 0)
+    : false;
 
   const { data } = useQuery<{ notifications: MentionNotification[]; users: Record<string, SlackUser> }>({
     queryKey: ["/api/slack/mention-notifications"],
@@ -387,7 +403,38 @@ export function SlackMentionNotificationBell() {
                     }}
                   />
                 </div>
-                <div className="flex justify-end mt-2">
+                <div className="flex items-center justify-between mt-2">
+                  {!isChecked ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => selectedNotif && markDoneMutation.mutate(selectedNotif.ts)}
+                      disabled={markDoneMutation.isPending}
+                      className="text-green-600 border-green-300 hover:bg-green-50"
+                      data-testid="button-mention-mark-done"
+                    >
+                      {markDoneMutation.isPending ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Marking...</>
+                      ) : (
+                        <><CheckSquare className="h-3.5 w-3.5 mr-1.5" />Mark Done</>
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => selectedNotif && unmarkDoneMutation.mutate(selectedNotif.ts)}
+                      disabled={unmarkDoneMutation.isPending}
+                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                      data-testid="button-mention-unmark-done"
+                    >
+                      {unmarkDoneMutation.isPending ? (
+                        <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Removing...</>
+                      ) : (
+                        <><XCircle className="h-3.5 w-3.5 mr-1.5" />Remove ✅</>
+                      )}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     onClick={handleSendReply}
