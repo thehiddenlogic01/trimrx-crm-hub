@@ -106,7 +106,7 @@ function buildAlertMessage(logs: any[], config: AlertConfig): string {
   return msg;
 }
 
-async function getFilteredLogs(since: Date, config: AlertConfig, until?: Date) {
+async function getFilteredLogs(since: Date, config: AlertConfig, until?: Date, applyFilters = true) {
   const result = await storage.getAuditLogs({
     from: since,
     to: until || new Date(),
@@ -116,14 +116,16 @@ async function getFilteredLogs(since: Date, config: AlertConfig, until?: Date) {
 
   let logs = result.logs || [];
 
-  if (config.filterUsers.length > 0) {
-    logs = logs.filter((l: any) => config.filterUsers.includes(l.username));
-  }
-  if (config.filterPages.length > 0) {
-    logs = logs.filter((l: any) => config.filterPages.some((p: string) => l.page.includes(p)));
-  }
-  if (config.filterActions.length > 0) {
-    logs = logs.filter((l: any) => config.filterActions.includes(l.action));
+  if (applyFilters) {
+    if (config.filterUsers.length > 0) {
+      logs = logs.filter((l: any) => config.filterUsers.includes(l.username));
+    }
+    if (config.filterPages.length > 0) {
+      logs = logs.filter((l: any) => config.filterPages.some((p: string) => l.page.includes(p)));
+    }
+    if (config.filterActions.length > 0) {
+      logs = logs.filter((l: any) => config.filterActions.includes(l.action));
+    }
   }
 
   return logs;
@@ -251,6 +253,7 @@ export function setupAuditAlertRoutes(app: Express) {
       const { sinceMinutes, fromTime, toTime } = req.body;
       let since: Date;
       let until: Date | undefined;
+      const isManual = !!fromTime;
 
       if (fromTime) {
         since = new Date(fromTime);
@@ -260,7 +263,8 @@ export function setupAuditAlertRoutes(app: Express) {
         since = new Date(Date.now() - mins * 60 * 1000);
       }
 
-      const logs = await getFilteredLogs(since, config, until);
+      // Manual sends bypass filters so the result matches what the preview showed
+      const logs = await getFilteredLogs(since, config, until, !isManual);
       if (logs.length === 0) {
         return res.json({ success: true, sent: false, message: "No audit logs found for the selected period" });
       }

@@ -110,7 +110,7 @@ export default function AlertsPage() {
       const [date, from, to] = previewKey.split("|");
       const fromISO = guatemalaToISO(date, from);
       const toISO = guatemalaToISO(date, to);
-      const params = new URLSearchParams({ from: fromISO, to: toISO, limit: "200" });
+      const params = new URLSearchParams({ from: fromISO, to: toISO, limit: "500" });
       const res = await fetch(`/api/audit-logs?${params.toString()}`, { credentials: "include" });
       return res.json();
     },
