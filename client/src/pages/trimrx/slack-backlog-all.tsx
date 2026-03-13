@@ -992,26 +992,7 @@ export default function SlackMessagesPage() {
     return () => es.close();
   }, []);
 
-  useEffect(() => {
-    if (!messages || messages.length === 0) return;
-    const threadsWithReplies = messages.filter((m) => m.reply_count > 0).slice(0, 15);
-    threadsWithReplies.forEach((msg, i) => {
-      const qk = ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts];
-      const existing = queryClient.getQueryData(qk);
-      if (existing) return;
-      setTimeout(() => {
-        queryClient.prefetchQuery({
-          queryKey: qk,
-          queryFn: async () => {
-            const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${msg.ts}`);
-            if (!res.ok) throw new Error("Failed to prefetch replies");
-            return res.json();
-          },
-          staleTime: 3 * 60 * 1000,
-        });
-      }, 500 + i * 300);
-    });
-  }, [messages]);
+  
 
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
@@ -2610,7 +2591,7 @@ function MessageCard({
     },
     enabled: isExpanded && expandReady && msg.reply_count > 0,
     retry: 1,
-    staleTime: 3 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
   });
 
   const replyResolvedRef = useRef<Set<string>>(new Set());

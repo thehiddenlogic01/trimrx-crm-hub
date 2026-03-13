@@ -56,7 +56,7 @@ async function getUserSlackClient(): Promise<WebClient | null> {
 
 const slackQueue: (() => Promise<void>)[] = [];
 let activeSlackCalls = 0;
-const MAX_CONCURRENT_SLACK = 10;
+const MAX_CONCURRENT_SLACK = 3;
 
 function enqueueSlackCall<T>(fn: () => Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -210,7 +210,8 @@ export function setupSlackRoutes(app: Express) {
   const DATE_CACHE_TTL = 5 * 60 * 1000;
 
   const replyCache: Record<string, { data: any[]; fetchedAt: number }> = {};
-  const REPLY_CACHE_TTL = 5 * 60 * 1000;
+  const REPLY_CACHE_TTL = 15 * 60 * 1000;
+  const replyInFlight: Record<string, Promise<any[]>> = {};
 
   const parentMsgCache: Record<string, { text: string; user: string }> = {};
 
@@ -384,33 +385,50 @@ export function setupSlackRoutes(app: Express) {
       const { channelId, threadTs } = req.params;
       const force = req.query.force === "1";
       const cacheKey = `${channelId}:${threadTs}`;
+
       if (!force && replyCache[cacheKey] && Date.now() - replyCache[cacheKey].fetchedAt < REPLY_CACHE_TTL) {
         return res.json(replyCache[cacheKey].data);
       }
+
+      if (!force && replyInFlight[cacheKey]) {
+        const messages = await replyInFlight[cacheKey];
+        return res.json(messages);
+      }
+
       const userClient = await getUserSlackClient();
       const client = userClient || botClient;
-      const result = await enqueueSlackCall(() => client.conversations.replies({
+
+      const fetchPromise = enqueueSlackCall(() => client.conversations.replies({
         channel: channelId,
         ts: threadTs,
         limit: 100,
-      }));
-      const messages = (result.messages || []).slice(1).map((msg: any) => ({
-        ts: msg.ts,
-        user: msg.user,
-        text: msg.text || "",
-        bot_id: msg.bot_id || null,
-        reactions: (msg.reactions || []).map((r: any) => ({
-          name: r.name,
-          count: r.count,
-          users: r.users,
-        })),
-        files: (msg.files || []).map((f: any) => ({
-          name: f.name,
-          url: f.url_private,
-          mimetype: f.mimetype,
-        })),
-      }));
-      replyCache[cacheKey] = { data: messages, fetchedAt: Date.now() };
+      })).then((result: any) => {
+        const messages = (result.messages || []).slice(1).map((msg: any) => ({
+          ts: msg.ts,
+          user: msg.user,
+          text: msg.text || "",
+          bot_id: msg.bot_id || null,
+          reactions: (msg.reactions || []).map((r: any) => ({
+            name: r.name,
+            count: r.count,
+            users: r.users,
+          })),
+          files: (msg.files || []).map((f: any) => ({
+            name: f.name,
+            url: f.url_private,
+            mimetype: f.mimetype,
+          })),
+        }));
+        replyCache[cacheKey] = { data: messages, fetchedAt: Date.now() };
+        delete replyInFlight[cacheKey];
+        return messages;
+      }).catch((err: any) => {
+        delete replyInFlight[cacheKey];
+        throw err;
+      });
+
+      replyInFlight[cacheKey] = fetchPromise;
+      const messages = await fetchPromise;
       return res.json(messages);
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to fetch replies" });
