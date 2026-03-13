@@ -293,8 +293,10 @@ export function setupSlackRoutes(app: Express) {
   }
 
   app.get("/api/slack/channels/:channelId/messages", async (req, res) => {
-    const client = await requireSlack(req, res);
-    if (!client) return;
+    const botClient = await requireSlack(req, res);
+    if (!botClient) return;
+    const userClient = await getUserSlackClient();
+    const client = userClient || botClient;
     try {
       const { channelId } = req.params;
       const dateStr = req.query.date as string | undefined;
