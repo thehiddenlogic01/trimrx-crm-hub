@@ -207,7 +207,7 @@ export function SlackMentionNotificationBell() {
                 data-testid="badge-notification-count"
                 className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold leading-none"
               >
-                {unreadCount > 99 ? "99+" : unreadCount}
+                {unreadCount}
               </span>
             )}
           </button>
