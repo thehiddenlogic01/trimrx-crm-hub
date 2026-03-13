@@ -238,7 +238,8 @@ export function setupSlackRoutes(app: Express) {
   const DATE_CACHE_TTL = 5 * 60 * 1000;
 
   const replyCache: Record<string, { data: any[]; fetchedAt: number }> = {};
-  const REPLY_CACHE_TTL = 15 * 60 * 1000;
+  const REPLY_CACHE_TTL = 30 * 60 * 1000;
+  const REPLY_CACHE_TTL_SOCKET = 24 * 60 * 60 * 1000;
   const replyInFlight: Record<string, Promise<any[]>> = {};
 
   const parentMsgCache: Record<string, { text: string; user: string }> = {};
@@ -426,7 +427,8 @@ export function setupSlackRoutes(app: Express) {
       const force = req.query.force === "1";
       const cacheKey = `${channelId}:${threadTs}`;
 
-      if (!force && replyCache[cacheKey] && Date.now() - replyCache[cacheKey].fetchedAt < REPLY_CACHE_TTL) {
+      const effectiveTTL = socketModeActive ? REPLY_CACHE_TTL_SOCKET : REPLY_CACHE_TTL;
+      if (!force && replyCache[cacheKey] && Date.now() - replyCache[cacheKey].fetchedAt < effectiveTTL) {
         return res.json(replyCache[cacheKey].data);
       }
 
