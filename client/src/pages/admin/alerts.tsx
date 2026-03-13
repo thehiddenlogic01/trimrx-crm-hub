@@ -20,6 +20,8 @@ import {
   Filter,
   FlaskConical,
   Save,
+  Eye,
+  RefreshCw,
 } from "lucide-react";
 
 interface AlertConfig {
@@ -90,6 +92,7 @@ export default function AlertsPage() {
   const [manualDate, setManualDate] = useState(getGuatemalaDate);
   const [manualFromTime, setManualFromTime] = useState("00:00");
   const [manualToTime, setManualToTime] = useState(getGuatemalaTime);
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
   const configQuery = useQuery<AlertConfig>({
@@ -98,6 +101,20 @@ export default function AlertsPage() {
 
   const usersQuery = useQuery<any[]>({
     queryKey: ["/api/users"],
+  });
+
+  const previewQuery = useQuery<{ logs: any[]; total: number }>({
+    queryKey: ["/api/audit-logs", previewKey],
+    queryFn: async () => {
+      if (!previewKey) return { logs: [], total: 0 };
+      const [date, from, to] = previewKey.split("|");
+      const fromISO = guatemalaToISO(date, from);
+      const toISO = guatemalaToISO(date, to);
+      const params = new URLSearchParams({ from: fromISO, to: toISO, limit: "200" });
+      const res = await fetch(`/api/audit-logs?${params.toString()}`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: !!previewKey,
   });
 
   useEffect(() => {
@@ -159,6 +176,12 @@ export default function AlertsPage() {
     },
     onError: (err: Error) => toast({ title: "Send failed", description: err.message, variant: "destructive" }),
   });
+
+  const loadPreview = () => {
+    setPreviewKey(`${manualDate}|${manualFromTime}|${manualToTime}`);
+  };
+
+  const resetPreview = () => setPreviewKey(null);
 
   const togglePage = (page: string) => {
     setFilterPages((prev) => prev.includes(page) ? prev.filter((p) => p !== page) : [...prev, page]);
@@ -304,38 +327,81 @@ export default function AlertsPage() {
             <div className="space-y-2">
               <Label className="text-sm font-medium flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" />
-                Date (Guatemala Time)
+                Date
               </Label>
               <Input
                 type="date"
                 value={manualDate}
-                onChange={(e) => setManualDate(e.target.value)}
+                onChange={(e) => { setManualDate(e.target.value); resetPreview(); }}
                 data-testid="input-manual-date"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label className="text-sm font-medium">From</Label>
+                <Label className="text-sm font-medium">From (GT)</Label>
                 <Input
                   type="time"
                   value={manualFromTime}
-                  onChange={(e) => setManualFromTime(e.target.value)}
+                  onChange={(e) => { setManualFromTime(e.target.value); resetPreview(); }}
                   data-testid="input-manual-from-time"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-sm font-medium">To</Label>
+                <Label className="text-sm font-medium">To (GT)</Label>
                 <Input
                   type="time"
                   value={manualToTime}
-                  onChange={(e) => setManualToTime(e.target.value)}
+                  onChange={(e) => { setManualToTime(e.target.value); resetPreview(); }}
                   data-testid="input-manual-to-time"
                 />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              All times are in <span className="font-medium">Guatemala (CST, UTC−6)</span> timezone.
+              Times are in <span className="font-medium">Guatemala (CST, UTC−6)</span> timezone.
             </p>
+
+            <Button
+              variant="outline"
+              onClick={loadPreview}
+              disabled={previewQuery.isFetching}
+              className="w-full"
+              data-testid="button-preview-logs"
+            >
+              {previewQuery.isFetching
+                ? <><Loader2 className="h-4 w-4 animate-spin mr-1" />Loading...</>
+                : previewKey
+                  ? <><RefreshCw className="h-4 w-4 mr-1" />Refresh Preview</>
+                  : <><Eye className="h-4 w-4 mr-1" />Preview Data</>
+              }
+            </Button>
+
+            {previewKey && previewQuery.data && (
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-muted/50 px-3 py-2 flex items-center justify-between border-b">
+                  <span className="text-xs font-medium">
+                    {previewQuery.data.logs?.length ?? 0} action{(previewQuery.data.logs?.length ?? 0) !== 1 ? "s" : ""} found
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {manualDate} · {manualFromTime} → {manualToTime} GT
+                  </span>
+                </div>
+                {previewQuery.data.logs?.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-4">No actions found for this time range.</p>
+                ) : (
+                  <div className="max-h-52 overflow-y-auto divide-y text-xs">
+                    {previewQuery.data.logs?.map((log: any) => (
+                      <div key={log.id} className="px-3 py-1.5 flex items-center gap-2" data-testid={`preview-log-${log.id}`}>
+                        <span className="text-muted-foreground w-14 shrink-0">
+                          {new Date(log.createdAt).toLocaleTimeString("en-US", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit", hour12: true })}
+                        </span>
+                        <span className="font-medium shrink-0">{log.username}</span>
+                        <span className="text-muted-foreground truncate">{log.action} · {log.page}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <Button
               onClick={() => sendNowMutation.mutate()}
