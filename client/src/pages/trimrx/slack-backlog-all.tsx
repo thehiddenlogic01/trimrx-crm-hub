@@ -1700,6 +1700,40 @@ export default function SlackMessagesPage() {
     return true;
   });
 
+  const prefetchTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const filteredTsKey = filteredMessages.map((m) => m.ts).join(",");
+  useEffect(() => {
+    prefetchTimeoutsRef.current.forEach(clearTimeout);
+    prefetchTimeoutsRef.current = [];
+
+    if (!dateFilter) return;
+
+    const toFetch = filteredMessages.filter(
+      (msg) =>
+        msg.reply_count > 0 &&
+        !queryClient.getQueryData(["/api/slack/channels", CHANNEL_ID, "replies", msg.ts])
+    );
+
+    toFetch.forEach((msg, idx) => {
+      const t = setTimeout(() => {
+        queryClient.prefetchQuery({
+          queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts],
+          queryFn: async () => {
+            const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${msg.ts}`);
+            if (!res.ok) throw new Error("Failed to prefetch replies");
+            return res.json() as Promise<ThreadReply[]>;
+          },
+          staleTime: 15 * 60 * 1000,
+        });
+      }, idx * 1200);
+      prefetchTimeoutsRef.current.push(t);
+    });
+
+    return () => {
+      prefetchTimeoutsRef.current.forEach(clearTimeout);
+    };
+  }, [dateFilter, filteredTsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function getUserName(userId: string) {
     if (!users || !users[userId]) return userId;
     const u = users[userId];
