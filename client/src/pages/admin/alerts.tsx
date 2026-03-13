@@ -64,16 +64,19 @@ const INTERVAL_OPTIONS = [
   { value: "1440", label: "Every 24 hours" },
 ];
 
-const MANUAL_PERIOD_OPTIONS = [
-  { value: "15", label: "Last 15 minutes" },
-  { value: "30", label: "Last 30 minutes" },
-  { value: "60", label: "Last 1 hour" },
-  { value: "120", label: "Last 2 hours" },
-  { value: "240", label: "Last 4 hours" },
-  { value: "480", label: "Last 8 hours" },
-  { value: "720", label: "Last 12 hours" },
-  { value: "1440", label: "Last 24 hours" },
-];
+const GT_TZ = "America/Guatemala";
+
+function getGuatemalaDate(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: GT_TZ });
+}
+
+function getGuatemalaTime(): string {
+  return new Date().toLocaleTimeString("en-GB", { timeZone: GT_TZ, hour: "2-digit", minute: "2-digit" });
+}
+
+function guatemalaToISO(date: string, time: string): string {
+  return new Date(`${date}T${time}:00-06:00`).toISOString();
+}
 
 export default function AlertsPage() {
   const { toast } = useToast();
@@ -84,7 +87,9 @@ export default function AlertsPage() {
   const [filterUsers, setFilterUsers] = useState<string[]>([]);
   const [filterPages, setFilterPages] = useState<string[]>([]);
   const [filterActions, setFilterActions] = useState<string[]>([]);
-  const [manualPeriod, setManualPeriod] = useState("60");
+  const [manualDate, setManualDate] = useState(getGuatemalaDate);
+  const [manualFromTime, setManualFromTime] = useState("00:00");
+  const [manualToTime, setManualToTime] = useState(getGuatemalaTime);
   const [initialized, setInitialized] = useState(false);
 
   const configQuery = useQuery<AlertConfig>({
@@ -139,7 +144,9 @@ export default function AlertsPage() {
 
   const sendNowMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/audit-alerts/send-now", { sinceMinutes: parseInt(manualPeriod) });
+      const fromISO = guatemalaToISO(manualDate, manualFromTime);
+      const toISO = guatemalaToISO(manualDate, manualToTime);
+      const res = await apiRequest("POST", "/api/audit-alerts/send-now", { fromTime: fromISO, toTime: toISO });
       return res.json();
     },
     onSuccess: (data: any) => {
@@ -279,7 +286,7 @@ export default function AlertsPage() {
 
             {config?.lastSent && (
               <p className="text-xs text-muted-foreground">
-                Last alert sent: {new Date(config.lastSent).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} ET
+                Last alert sent: {new Date(config.lastSent).toLocaleString("en-US", { timeZone: "America/Guatemala", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} GT
               </p>
             )}
           </CardContent>
@@ -295,18 +302,40 @@ export default function AlertsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Time Period</Label>
-              <Select value={manualPeriod} onValueChange={setManualPeriod}>
-                <SelectTrigger data-testid="select-manual-period">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MANUAL_PERIOD_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                Date (Guatemala Time)
+              </Label>
+              <Input
+                type="date"
+                value={manualDate}
+                onChange={(e) => setManualDate(e.target.value)}
+                data-testid="input-manual-date"
+              />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">From</Label>
+                <Input
+                  type="time"
+                  value={manualFromTime}
+                  onChange={(e) => setManualFromTime(e.target.value)}
+                  data-testid="input-manual-from-time"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">To</Label>
+                <Input
+                  type="time"
+                  value={manualToTime}
+                  onChange={(e) => setManualToTime(e.target.value)}
+                  data-testid="input-manual-to-time"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              All times are in <span className="font-medium">Guatemala (CST, UTC−6)</span> timezone.
+            </p>
 
             <Button
               onClick={() => sendNowMutation.mutate()}

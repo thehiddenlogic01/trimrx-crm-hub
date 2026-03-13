@@ -209,7 +209,7 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
                     <div className="flex items-center gap-2 mb-1 text-xs text-muted-foreground">
                       <span className="font-medium">{r.userName || r.user}</span>
                       <span>·</span>
-                      <span>{new Date(parseFloat(r.ts) * 1000).toLocaleString()}</span>
+                      <span>{new Date(parseFloat(r.ts) * 1000).toLocaleString("en-US", { timeZone: "America/Guatemala", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}</span>
                     </div>
                     <div
                       className="leading-relaxed [&_a]:text-primary [&_a]:underline [&_strong]:font-bold"
@@ -253,7 +253,7 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
         { label: "Notes", value: report.notes },
         { label: "Agent Notes", value: report.agentNotes },
         { label: "Agent Assigned", value: report.agentAssigned },
-        { label: "Created", value: report.createdAt ? new Date(report.createdAt).toLocaleString() : null },
+        { label: "Created", value: report.createdAt ? new Date(report.createdAt).toLocaleString("en-US", { timeZone: "America/Guatemala", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true }) : null },
       ].filter(f => f.value);
 
       return (
@@ -319,7 +319,7 @@ function ViewContextDialog({ log, open, onClose }: { log: AuditLog | null; open:
               </div>
               <div>
                 <span className="text-muted-foreground">Time: </span>
-                <span className="text-xs">{new Date(log.createdAt).toLocaleString()}</span>
+                <span className="text-xs">{new Date(log.createdAt).toLocaleString("en-US", { timeZone: "America/Guatemala", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", hour12: true })}</span>
               </div>
             </div>
 
@@ -454,6 +454,7 @@ export default function AuditReportPage() {
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleString("en-US", {
+      timeZone: "America/Guatemala",
       month: "short",
       day: "numeric",
       year: "numeric",

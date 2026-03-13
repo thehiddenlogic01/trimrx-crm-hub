@@ -101,15 +101,15 @@ function buildAlertMessage(logs: any[], config: AlertConfig): string {
   }
 
   const now = new Date();
-  msg += `<i>Report time: ${now.toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} ET</i>`;
+  msg += `<i>Report time: ${now.toLocaleString("en-US", { timeZone: "America/Guatemala", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} GT</i>`;
 
   return msg;
 }
 
-async function getFilteredLogs(since: Date, config: AlertConfig) {
+async function getFilteredLogs(since: Date, config: AlertConfig, until?: Date) {
   const result = await storage.getAuditLogs({
     from: since,
-    to: new Date(),
+    to: until || new Date(),
     limit: 500,
     offset: 0,
   });
@@ -248,11 +248,19 @@ export function setupAuditAlertRoutes(app: Express) {
         return res.status(400).json({ error: "Telegram Bot Token and Chat ID are required" });
       }
 
-      const { sinceMinutes } = req.body;
-      const mins = sinceMinutes ? parseInt(sinceMinutes) : config.intervalMinutes;
-      const since = new Date(Date.now() - mins * 60 * 1000);
+      const { sinceMinutes, fromTime, toTime } = req.body;
+      let since: Date;
+      let until: Date | undefined;
 
-      const logs = await getFilteredLogs(since, config);
+      if (fromTime) {
+        since = new Date(fromTime);
+        until = toTime ? new Date(toTime) : new Date();
+      } else {
+        const mins = sinceMinutes ? parseInt(sinceMinutes) : config.intervalMinutes;
+        since = new Date(Date.now() - mins * 60 * 1000);
+      }
+
+      const logs = await getFilteredLogs(since, config, until);
       if (logs.length === 0) {
         return res.json({ success: true, sent: false, message: "No audit logs found for the selected period" });
       }
