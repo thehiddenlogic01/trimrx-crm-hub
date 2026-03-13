@@ -851,6 +851,7 @@ export default function SlackMessagesPage() {
   const [expandAllReplies, setExpandAllReplies] = useState(false);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyBroadcast, setReplyBroadcast] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
   const [mentionFilter, setMentionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -1067,15 +1068,16 @@ export default function SlackMessagesPage() {
   }, [users]);
 
   const replyMutation = useMutation({
-    mutationFn: async ({ threadTs, text }: { threadTs: string; text: string }) => {
+    mutationFn: async ({ threadTs, text, broadcast }: { threadTs: string; text: string; broadcast?: boolean }) => {
       const converted = convertMentionsToIds(text);
-      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { thread_ts: threadTs, text: converted }, { "x-audit-source": "Slack Backlog All" });
+      await apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { thread_ts: threadTs, text: converted, reply_broadcast: broadcast || undefined }, { "x-audit-source": "Slack Backlog All" });
     },
     onMutate: ({ threadTs, text }) => {
       const snapshot = snapshotChannelCache();
       const prevReplyText = replyText[threadTs] || "";
       setReplyText((prev) => ({ ...prev, [threadTs]: "" }));
       setReplyingTo(null);
+      setReplyBroadcast(false);
       const newReply: ThreadReply = {
         ts: String(Date.now() / 1000),
         user: "me",
@@ -2120,6 +2122,8 @@ export default function SlackMessagesPage() {
               setReplyText={setReplyText}
               replyingTo={replyingTo}
               setReplyingTo={setReplyingTo}
+              replyBroadcast={replyBroadcast}
+              setReplyBroadcast={setReplyBroadcast}
               replyMutation={replyMutation}
               reactMutation={reactMutation}
               unreactMutation={unreactMutation}
@@ -2153,6 +2157,8 @@ function ReplyWithTemplates({
   setReplyText,
   replyMutation,
   agentNotes,
+  replyBroadcast,
+  setReplyBroadcast,
 }: {
   msgTs: string;
   threadTs: string;
@@ -2160,6 +2166,8 @@ function ReplyWithTemplates({
   setReplyText: (fn: (prev: Record<string, string>) => Record<string, string>) => void;
   replyMutation: any;
   agentNotes?: string;
+  replyBroadcast?: boolean;
+  setReplyBroadcast?: (v: boolean) => void;
 }) {
   const { data: templates } = useQuery<ReplyTemplate[]>({
     queryKey: ["/api/slack/reply-templates"],
@@ -2215,7 +2223,7 @@ function ReplyWithTemplates({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && (replyText[msgTs] || "").trim()) {
               e.preventDefault();
-              replyMutation.mutate({ threadTs, text: (replyText[msgTs] || "").trim() });
+              replyMutation.mutate({ threadTs, text: (replyText[msgTs] || "").trim(), broadcast: replyBroadcast });
             }
           }}
           rows={2}
@@ -2224,13 +2232,24 @@ function ReplyWithTemplates({
         />
         <Button
           size="sm"
-          onClick={() => replyMutation.mutate({ threadTs, text: replyText[msgTs] || "" })}
+          onClick={() => replyMutation.mutate({ threadTs, text: replyText[msgTs] || "", broadcast: replyBroadcast })}
           disabled={!replyText[msgTs]?.trim() || replyMutation.isPending}
           data-testid={`button-send-reply-${msgTs}`}
         >
           {replyMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
+      {setReplyBroadcast && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none mt-1" data-testid={`checkbox-broadcast-${msgTs}`}>
+          <input
+            type="checkbox"
+            checked={replyBroadcast || false}
+            onChange={(e) => setReplyBroadcast(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-border accent-primary"
+          />
+          Also send to <span className="font-medium text-foreground">#trimrx--cv--support</span>
+        </label>
+      )}
     </div>
   );
 }
@@ -2433,6 +2452,8 @@ function MessageCard({
   setReplyText,
   replyingTo,
   setReplyingTo,
+  replyBroadcast,
+  setReplyBroadcast,
   replyMutation,
   reactMutation,
   unreactMutation,
@@ -2463,6 +2484,8 @@ function MessageCard({
   setReplyText: (fn: (prev: Record<string, string>) => Record<string, string>) => void;
   replyingTo: string | null;
   setReplyingTo: (ts: string | null) => void;
+  replyBroadcast?: boolean;
+  setReplyBroadcast?: (v: boolean) => void;
   replyMutation: any;
   reactMutation: any;
   unreactMutation: any;
@@ -3035,6 +3058,8 @@ function MessageCard({
             setReplyText={setReplyText}
             replyMutation={replyMutation}
             agentNotes={trackerMatch ? getTrackerField(trackerMatch, "TrimRx Agent Notes", "trimrx_agent_notes") : undefined}
+            replyBroadcast={replyBroadcast}
+            setReplyBroadcast={setReplyBroadcast}
           />
         )}
 

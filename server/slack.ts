@@ -830,7 +830,7 @@ export function setupSlackRoutes(app: Express) {
   app.post("/api/slack/channels/:channelId/reply", async (req, res) => {
     const client = await requireSlack(req, res);
     if (!client) return;
-    const { thread_ts, text } = req.body;
+    const { thread_ts, text, reply_broadcast } = req.body;
     if (!thread_ts || typeof thread_ts !== "string") {
       return res.status(400).json({ message: "thread_ts is required" });
     }
@@ -890,6 +890,7 @@ export function setupSlackRoutes(app: Express) {
         channel: channelId,
         text: processedText,
         thread_ts,
+        reply_broadcast: reply_broadcast === true ? true : undefined,
       });
       const patchReplyCount = (messages: any[]) => {
         for (const msg of messages) {
