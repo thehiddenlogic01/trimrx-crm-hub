@@ -345,11 +345,19 @@ export function setupSlackRoutes(app: Express) {
           }
         }
 
-        await fetchAndCacheParents(client, channelId, parentTsToFetch);
-
         const messages = allRawMessages.map((msg) => formatMessage(msg, channelId, msgByTs));
         dateCache[cacheKey] = { data: messages, fetchedAt: Date.now() };
-        return res.json(messages);
+        res.json(messages);
+
+        if (parentTsToFetch.length > 0) {
+          fetchAndCacheParents(client, channelId, parentTsToFetch)
+            .then(() => {
+              const updated = allRawMessages.map((msg) => formatMessage(msg, channelId, msgByTs));
+              dateCache[cacheKey] = { data: updated, fetchedAt: Date.now() };
+            })
+            .catch(() => {});
+        }
+        return;
       }
 
       const historyParams: any = { channel: channelId, limit: 50 };
@@ -371,10 +379,12 @@ export function setupSlackRoutes(app: Express) {
         }
       }
 
-      await fetchAndCacheParents(client, channelId, parentTsToFetch);
-
       const messages = allRawMessages.map((msg) => formatMessage(msg, channelId, msgByTs));
-      return res.json(messages);
+      res.json(messages);
+      if (parentTsToFetch.length > 0) {
+        fetchAndCacheParents(client, channelId, parentTsToFetch).catch(() => {});
+      }
+      return;
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to fetch messages" });
     }
