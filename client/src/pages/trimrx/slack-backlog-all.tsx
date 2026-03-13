@@ -865,6 +865,7 @@ export default function SlackMessagesPage() {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
+  const [dataSyncOpen, setDataSyncOpen] = useState(false);
   const [replyFilters, setReplyFilters] = useState<string[]>([]);
   const [replyFilterLoading, setReplyFilterLoading] = useState(false);
   const [replyFilterMatchedMap, setReplyFilterMatchedMap] = useState<Record<string, Record<string, { matchedBy: string }>>>({});
@@ -1949,20 +1950,20 @@ export default function SlackMessagesPage() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <Popover open={bulkActionsOpen} onOpenChange={setBulkActionsOpen}>
+          <Popover open={dataSyncOpen} onOpenChange={setDataSyncOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-1.5" data-testid="button-bulk-actions">
-                <ListChecks className="h-4 w-4" />
-                Bulk Actions
+              <Button variant="outline" size="sm" className="h-9 gap-1.5" data-testid="button-data-sync">
+                <Database className="h-4 w-4" />
+                Data &amp; Sync
                 <ChevronDown className="h-3 w-3 ml-0.5" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 p-1" data-testid="popover-bulk-actions">
+            <PopoverContent align="end" className="w-72 p-1" data-testid="popover-data-sync">
               <div className="space-y-0.5">
-                <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Data & Sync</p>
+                <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Data &amp; Sync</p>
                 {can("slack-backlog-all", "check-cv-status") && (
                   <button
-                    onClick={() => { checkCvStatus(); setBulkActionsOpen(false); }}
+                    onClick={() => { checkCvStatus(); setDataSyncOpen(false); }}
                     disabled={cvStatusLoading || !messages || messages.length === 0}
                     className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
                     data-testid="button-check-cv-status"
@@ -1973,7 +1974,7 @@ export default function SlackMessagesPage() {
                   </button>
                 )}
                 <button
-                  onClick={() => { matchTrackerData(); setBulkActionsOpen(false); }}
+                  onClick={() => { matchTrackerData(); setDataSyncOpen(false); }}
                   disabled={trackerMatchLoading || !messages || messages.length === 0}
                   className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
                   data-testid="button-match-data"
@@ -1985,7 +1986,7 @@ export default function SlackMessagesPage() {
                 {can("slack-backlog-all", "top-toolbar-tools") && (
                   <>
                     <button
-                      onClick={() => { handleCheckAllPayments(); setBulkActionsOpen(false); }}
+                      onClick={() => { handleCheckAllPayments(); setDataSyncOpen(false); }}
                       disabled={paymentsLoading}
                       className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
                       data-testid="button-check-all-payments"
@@ -1997,7 +1998,7 @@ export default function SlackMessagesPage() {
                       )}
                     </button>
                     <button
-                      onClick={() => { handleSyncDataCv(); setBulkActionsOpen(false); }}
+                      onClick={() => { handleSyncDataCv(); setDataSyncOpen(false); }}
                       disabled={cvSyncLoading}
                       className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
                       data-testid="button-sync-data-cv"
@@ -2009,7 +2010,7 @@ export default function SlackMessagesPage() {
                       )}
                     </button>
                     <button
-                      onClick={() => { matchTrackerData(); setBulkActionsOpen(false); }}
+                      onClick={() => { matchTrackerData(); setDataSyncOpen(false); }}
                       disabled={trackerMatchLoading}
                       className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
                       data-testid="button-tracker-data-sync"
@@ -2022,8 +2023,20 @@ export default function SlackMessagesPage() {
                     </button>
                   </>
                 )}
-                <div className="border-t border-border my-1" />
-                <p className="px-2.5 pt-1 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Bulk Operations</p>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Popover open={bulkActionsOpen} onOpenChange={setBulkActionsOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5" data-testid="button-bulk-actions">
+                <ListChecks className="h-4 w-4" />
+                Bulk Actions
+                <ChevronDown className="h-3 w-3 ml-0.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-1" data-testid="popover-bulk-actions">
+              <div className="space-y-0.5">
+                <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Bulk Operations</p>
                 {can("slack-backlog-all", "bulk-done") && filteredMessages.length > 0 && Object.keys(cvStatusMap).length > 0 && (
                   <>
                     <label className="flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm cursor-pointer hover:bg-accent select-none transition-colors" data-testid="checkbox-select-all">
