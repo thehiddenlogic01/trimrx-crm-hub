@@ -2037,38 +2037,6 @@ export default function SlackMessagesPage() {
             <PopoverContent align="end" className="w-72 p-1" data-testid="popover-bulk-actions">
               <div className="space-y-0.5">
                 <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Bulk Operations</p>
-                {can("slack-backlog-all", "bulk-done") && filteredMessages.length > 0 && Object.keys(cvStatusMap).length > 0 && (
-                  <>
-                    <label className="flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm cursor-pointer hover:bg-accent select-none transition-colors" data-testid="checkbox-select-all">
-                      <input
-                        type="checkbox"
-                        checked={filteredMessages.length > 0 && filteredMessages.every((m) => selectedMessages.has(m.ts))}
-                        onChange={() => toggleSelectAll(filteredMessages)}
-                        className="h-3.5 w-3.5 rounded border-border accent-primary"
-                      />
-                      Select All ({selectedMessages.size}/{filteredMessages.length})
-                    </label>
-                    {selectedMessages.size > 0 && (
-                      <button
-                        onClick={() => { bulkOptionDone(filteredMessages); setBulkActionsOpen(false); }}
-                        disabled={bulkProcessing}
-                        className="flex items-center gap-2.5 w-full px-2.5 py-2 rounded-md text-sm text-left hover:bg-accent disabled:opacity-50 transition-colors"
-                        data-testid="button-bulk-option-done"
-                      >
-                        {bulkProcessing ? (
-                          <><Loader2 className="h-4 w-4 animate-spin text-green-600 shrink-0" /><span>Processing {bulkProgress.done}/{bulkProgress.total}...</span></>
-                        ) : (
-                          <><CheckSquare className="h-4 w-4 text-green-600 shrink-0" /><span>Bulk Option Done ({selectedMessages.size})</span></>
-                        )}
-                      </button>
-                    )}
-                  </>
-                )}
-                {can("slack-backlog-all", "send-to-cv") && filteredMessages.length > 0 && (
-                  <div className="px-0">
-                    <SendToCvReportDialog messages={filteredMessages} dateFilter={dateFilter} />
-                  </div>
-                )}
               </div>
             </PopoverContent>
           </Popover>
