@@ -68,39 +68,47 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function buildAlertMessage(logs: any[], config: AlertConfig): string {
+function buildAlertMessage(logs: any[], _config: AlertConfig, reportTime?: Date): string {
   if (logs.length === 0) return "";
 
-  const userActions: Record<string, { pages: Set<string>; count: number; actions: string[] }> = {};
+  // Group by user → (action, page) → count
+  const userMap: Record<string, {
+    total: number;
+    pages: Set<string>;
+    actionCounts: Record<string, number>;
+  }> = {};
 
   for (const log of logs) {
-    if (!userActions[log.username]) {
-      userActions[log.username] = { pages: new Set(), count: 0, actions: [] };
+    if (!userMap[log.username]) {
+      userMap[log.username] = { total: 0, pages: new Set(), actionCounts: {} };
     }
-    userActions[log.username].pages.add(log.page);
-    userActions[log.username].count++;
-    if (userActions[log.username].actions.length < 5) {
-      userActions[log.username].actions.push(`${log.action} (${log.page})`);
-    }
+    userMap[log.username].total++;
+    userMap[log.username].pages.add(log.page);
+    const key = `${log.action}||${log.page}`;
+    userMap[log.username].actionCounts[key] = (userMap[log.username].actionCounts[key] || 0) + 1;
   }
 
   let msg = `<b>📋 TrimRX Audit Alert</b>\n`;
   msg += `<i>${logs.length} action${logs.length !== 1 ? "s" : ""} recorded</i>\n\n`;
 
-  for (const [username, data] of Object.entries(userActions)) {
+  // Sort users by total actions descending
+  const sortedUsers = Object.entries(userMap).sort((a, b) => b[1].total - a[1].total);
+
+  for (const [username, data] of sortedUsers) {
     const pages = Array.from(data.pages).map(escapeHtml).join(", ");
-    msg += `<b>👤 ${escapeHtml(username)}</b> — ${data.count} action${data.count !== 1 ? "s" : ""}\n`;
+    msg += `<b>👤 ${escapeHtml(username)}</b> — ${data.total} action${data.total !== 1 ? "s" : ""}\n`;
     msg += `Pages: ${pages}\n`;
-    for (const action of data.actions) {
-      msg += `  • ${escapeHtml(action)}\n`;
-    }
-    if (data.count > 5) {
-      msg += `  <i>...and ${data.count - 5} more</i>\n`;
+
+    // Sort action+page combos by count descending
+    const sortedActions = Object.entries(data.actionCounts).sort((a, b) => b[1] - a[1]);
+    for (const [key, count] of sortedActions) {
+      const [action, page] = key.split("||");
+      msg += `  • ${escapeHtml(action)} (${escapeHtml(page)}) × ${count}\n`;
     }
     msg += `\n`;
   }
 
-  const now = new Date();
+  const now = reportTime || new Date();
   msg += `<i>Report time: ${now.toLocaleString("en-US", { timeZone: "America/Guatemala", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} GT</i>`;
 
   return msg;
@@ -242,6 +250,29 @@ export function setupAuditAlertRoutes(app: Express) {
     }
   });
 
+  // Build preview message from a time range (returns the formatted Telegram HTML message)
+  app.post("/api/audit-alerts/build-message", async (req: Request, res: Response) => {
+    if (!requireAdmin(req, res)) return;
+    try {
+      const config = await getAlertConfig();
+      const { fromTime, toTime } = req.body;
+      if (!fromTime) return res.status(400).json({ error: "fromTime is required" });
+
+      const since = new Date(fromTime);
+      const until = toTime ? new Date(toTime) : new Date();
+      const logs = await getFilteredLogs(since, config, until, false);
+
+      if (logs.length === 0) {
+        return res.json({ message: "", logCount: 0 });
+      }
+
+      const message = buildAlertMessage(logs, config);
+      res.json({ message, logCount: logs.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/audit-alerts/send-now", async (req: Request, res: Response) => {
     if (!requireAdmin(req, res)) return;
     try {
@@ -250,7 +281,7 @@ export function setupAuditAlertRoutes(app: Express) {
         return res.status(400).json({ error: "Telegram Bot Token and Chat ID are required" });
       }
 
-      const { sinceMinutes, fromTime, toTime } = req.body;
+      const { sinceMinutes, fromTime, toTime, customMessage } = req.body;
       let since: Date;
       let until: Date | undefined;
       const isManual = !!fromTime;
@@ -261,6 +292,16 @@ export function setupAuditAlertRoutes(app: Express) {
       } else {
         const mins = sinceMinutes ? parseInt(sinceMinutes) : config.intervalMinutes;
         since = new Date(Date.now() - mins * 60 * 1000);
+      }
+
+      // If user edited the message, send it directly without querying logs
+      if (customMessage && customMessage.trim()) {
+        const result = await sendTelegramMessage(config.telegramBotToken, config.telegramChatId, customMessage.trim());
+        if (result.ok) {
+          await storage.setSetting(`${ALERT_PREFIX}last_sent`, new Date().toISOString());
+          return res.json({ success: true, sent: true, logCount: null });
+        }
+        return res.status(400).json({ error: result.error || "Failed to send alert" });
       }
 
       // Manual sends bypass filters so the result matches what the preview showed

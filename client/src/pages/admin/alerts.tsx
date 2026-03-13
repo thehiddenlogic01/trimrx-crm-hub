@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -22,6 +23,8 @@ import {
   Save,
   Eye,
   RefreshCw,
+  Pencil,
+  RotateCcw,
 } from "lucide-react";
 
 interface AlertConfig {
@@ -52,6 +55,9 @@ const ALL_ACTIONS = [
   "CV Report Updated",
   "CV Report Deleted",
   "Push to Google Sheets",
+  "Send to CV Report",
+  "Bulk Mark Done",
+  "Bulk Send to CV",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -92,8 +98,13 @@ export default function AlertsPage() {
   const [manualDate, setManualDate] = useState(getGuatemalaDate);
   const [manualFromTime, setManualFromTime] = useState("00:00");
   const [manualToTime, setManualToTime] = useState(getGuatemalaTime);
-  const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+
+  // Preview message state
+  const [previewMessage, setPreviewMessage] = useState<string | null>(null);
+  const [previewLogCount, setPreviewLogCount] = useState<number>(0);
+  const [editedMessage, setEditedMessage] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const configQuery = useQuery<AlertConfig>({
     queryKey: ["/api/audit-alerts/config"],
@@ -101,20 +112,6 @@ export default function AlertsPage() {
 
   const usersQuery = useQuery<any[]>({
     queryKey: ["/api/users"],
-  });
-
-  const previewQuery = useQuery<{ logs: any[]; total: number }>({
-    queryKey: ["/api/audit-logs", previewKey],
-    queryFn: async () => {
-      if (!previewKey) return { logs: [], total: 0 };
-      const [date, from, to] = previewKey.split("|");
-      const fromISO = guatemalaToISO(date, from);
-      const toISO = guatemalaToISO(date, to);
-      const params = new URLSearchParams({ from: fromISO, to: toISO, limit: "500" });
-      const res = await fetch(`/api/audit-logs?${params.toString()}`, { credentials: "include" });
-      return res.json();
-    },
-    enabled: !!previewKey,
   });
 
   useEffect(() => {
@@ -159,16 +156,35 @@ export default function AlertsPage() {
     onError: (err: Error) => toast({ title: "Test failed", description: err.message, variant: "destructive" }),
   });
 
+  const buildMessageMutation = useMutation({
+    mutationFn: async () => {
+      const fromISO = guatemalaToISO(manualDate, manualFromTime);
+      const toISO = guatemalaToISO(manualDate, manualToTime);
+      const res = await apiRequest("POST", "/api/audit-alerts/build-message", { fromTime: fromISO, toTime: toISO });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setPreviewMessage(data.message || "");
+      setPreviewLogCount(data.logCount || 0);
+      setEditedMessage(null);
+      setIsEditing(false);
+    },
+    onError: (err: Error) => toast({ title: "Preview failed", description: err.message, variant: "destructive" }),
+  });
+
   const sendNowMutation = useMutation({
     mutationFn: async () => {
       const fromISO = guatemalaToISO(manualDate, manualFromTime);
       const toISO = guatemalaToISO(manualDate, manualToTime);
-      const res = await apiRequest("POST", "/api/audit-alerts/send-now", { fromTime: fromISO, toTime: toISO });
+      const payload: any = { fromTime: fromISO, toTime: toISO };
+      const msgToSend = editedMessage !== null ? editedMessage : previewMessage;
+      if (msgToSend !== null) payload.customMessage = msgToSend;
+      const res = await apiRequest("POST", "/api/audit-alerts/send-now", payload);
       return res.json();
     },
     onSuccess: (data: any) => {
       if (data.sent) {
-        toast({ title: `Alert sent! (${data.logCount} actions reported)` });
+        toast({ title: data.logCount != null ? `Alert sent! (${data.logCount} actions reported)` : "Alert sent!" });
         queryClient.invalidateQueries({ queryKey: ["/api/audit-alerts/config"] });
       } else {
         toast({ title: data.message || "No logs to report", variant: "destructive" });
@@ -177,11 +193,12 @@ export default function AlertsPage() {
     onError: (err: Error) => toast({ title: "Send failed", description: err.message, variant: "destructive" }),
   });
 
-  const loadPreview = () => {
-    setPreviewKey(`${manualDate}|${manualFromTime}|${manualToTime}`);
+  const resetPreview = () => {
+    setPreviewMessage(null);
+    setPreviewLogCount(0);
+    setEditedMessage(null);
+    setIsEditing(false);
   };
-
-  const resetPreview = () => setPreviewKey(null);
 
   const togglePage = (page: string) => {
     setFilterPages((prev) => prev.includes(page) ? prev.filter((p) => p !== page) : [...prev, page]);
@@ -197,6 +214,8 @@ export default function AlertsPage() {
 
   const config = configQuery.data;
   const isConnected = config?.hasBotToken && config?.telegramChatId;
+  const hasPreview = previewMessage !== null;
+  const displayMessage = editedMessage !== null ? editedMessage : (previewMessage || "");
 
   return (
     <div className="space-y-6">
@@ -321,7 +340,7 @@ export default function AlertsPage() {
               <Send className="h-4 w-4" />
               Send Manually
             </CardTitle>
-            <CardDescription>Send an audit alert right now for a selected time period</CardDescription>
+            <CardDescription>Preview the report message, edit if needed, then send to Telegram</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -362,42 +381,74 @@ export default function AlertsPage() {
 
             <Button
               variant="outline"
-              onClick={loadPreview}
-              disabled={previewQuery.isFetching}
+              onClick={() => buildMessageMutation.mutate()}
+              disabled={buildMessageMutation.isPending}
               className="w-full"
               data-testid="button-preview-logs"
             >
-              {previewQuery.isFetching
-                ? <><Loader2 className="h-4 w-4 animate-spin mr-1" />Loading...</>
-                : previewKey
+              {buildMessageMutation.isPending
+                ? <><Loader2 className="h-4 w-4 animate-spin mr-1" />Building preview...</>
+                : hasPreview
                   ? <><RefreshCw className="h-4 w-4 mr-1" />Refresh Preview</>
-                  : <><Eye className="h-4 w-4 mr-1" />Preview Data</>
+                  : <><Eye className="h-4 w-4 mr-1" />Preview Message</>
               }
             </Button>
 
-            {previewKey && previewQuery.data && (
+            {hasPreview && (
               <div className="border rounded-lg overflow-hidden">
-                <div className="bg-muted/50 px-3 py-2 flex items-center justify-between border-b">
+                <div className="bg-muted/50 px-3 py-2 flex items-center justify-between border-b gap-2">
                   <span className="text-xs font-medium">
-                    {previewQuery.data.logs?.length ?? 0} action{(previewQuery.data.logs?.length ?? 0) !== 1 ? "s" : ""} found
+                    {previewLogCount > 0
+                      ? <>{previewLogCount} action{previewLogCount !== 1 ? "s" : ""} — <span className="text-muted-foreground">{manualDate} · {manualFromTime} → {manualToTime} GT</span></>
+                      : <span className="text-muted-foreground">No actions in this period</span>
+                    }
                   </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {manualDate} · {manualFromTime} → {manualToTime} GT
-                  </span>
+                  <div className="flex gap-1 shrink-0">
+                    {editedMessage !== null && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs gap-1"
+                        onClick={() => { setEditedMessage(null); setIsEditing(false); }}
+                        data-testid="button-reset-message"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Reset
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs gap-1"
+                      onClick={() => setIsEditing((v) => !v)}
+                      data-testid="button-edit-message"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      {isEditing ? "Done" : "Edit"}
+                    </Button>
+                  </div>
                 </div>
-                {previewQuery.data.logs?.length === 0 ? (
+
+                {previewLogCount === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-4">No actions found for this time range.</p>
+                ) : isEditing ? (
+                  <Textarea
+                    className="font-mono text-[11px] leading-relaxed rounded-none border-0 focus-visible:ring-0 min-h-[220px] resize-y"
+                    value={displayMessage}
+                    onChange={(e) => setEditedMessage(e.target.value)}
+                    data-testid="textarea-message-edit"
+                  />
                 ) : (
-                  <div className="max-h-52 overflow-y-auto divide-y text-xs">
-                    {previewQuery.data.logs?.map((log: any) => (
-                      <div key={log.id} className="px-3 py-1.5 flex items-center gap-2" data-testid={`preview-log-${log.id}`}>
-                        <span className="text-muted-foreground w-14 shrink-0">
-                          {new Date(log.createdAt).toLocaleTimeString("en-US", { timeZone: "America/Guatemala", hour: "2-digit", minute: "2-digit", hour12: true })}
-                        </span>
-                        <span className="font-medium shrink-0">{log.username}</span>
-                        <span className="text-muted-foreground truncate">{log.action} · {log.page}</span>
-                      </div>
-                    ))}
+                  <div className="max-h-64 overflow-y-auto px-3 py-2">
+                    <pre className="font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-foreground">
+                      {displayMessage}
+                    </pre>
+                  </div>
+                )}
+
+                {editedMessage !== null && (
+                  <div className="px-3 py-1.5 border-t bg-amber-50 dark:bg-amber-950/30">
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400">✏️ Message has been edited — this edited version will be sent</p>
                   </div>
                 )}
               </div>
@@ -405,7 +456,7 @@ export default function AlertsPage() {
 
             <Button
               onClick={() => sendNowMutation.mutate()}
-              disabled={sendNowMutation.isPending || !isConnected}
+              disabled={sendNowMutation.isPending || !isConnected || (hasPreview && previewLogCount === 0 && editedMessage === null)}
               className="w-full"
               data-testid="button-send-now"
             >
@@ -422,7 +473,7 @@ export default function AlertsPage() {
             <Filter className="h-4 w-4" />
             Alert Filters
           </CardTitle>
-          <CardDescription>Choose which users, pages, and actions to include in alerts. Leave empty to include all.</CardDescription>
+          <CardDescription>Choose which users, pages, and actions to include in <b>auto</b> alerts. Manual sends always show all actions.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3">
@@ -495,7 +546,7 @@ export default function AlertsPage() {
           </div>
 
           <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
-            Click badges to toggle filters. Selected (filled) badges mean only those items will be included. Save settings after making changes.
+            Click badges to toggle filters. Selected (filled) badges mean only those items will be included in automatic scheduled alerts. Save settings after making changes.
           </p>
         </CardContent>
       </Card>
