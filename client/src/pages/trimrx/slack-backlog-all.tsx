@@ -1931,6 +1931,7 @@ export default function SlackMessagesPage() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <SendToCvReportDialog messages={filteredMessages} dateFilter={dateFilter} />
           <Popover open={dataSyncOpen} onOpenChange={setDataSyncOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 gap-1.5" data-testid="button-data-sync">
