@@ -320,7 +320,8 @@ export function setupSlackRoutes(app: Express) {
   });
 
   const dateCache: Record<string, { data: any[]; fetchedAt: number }> = {};
-  const DATE_CACHE_TTL = 5 * 60 * 1000;
+  const DATE_CACHE_TTL = 24 * 60 * 60 * 1000;
+  const dateFetching: Record<string, Promise<any[]>> = {};
 
   const replyCache: Record<string, { data: any[]; fetchedAt: number }> = {};
   const REPLY_CACHE_TTL = 30 * 60 * 1000;
@@ -426,6 +427,16 @@ export function setupSlackRoutes(app: Express) {
           return res.json(cached.data);
         }
 
+        if (!forceRefresh && dateFetching[cacheKey]) {
+          trackUser(msgUsername, true, false);
+          try {
+            const messages = await dateFetching[cacheKey];
+            return res.json(messages);
+          } catch {
+            return res.status(500).json({ message: "Failed to fetch messages" });
+          }
+        }
+
         const dayStart = new Date(dateStr + "T00:00:00-06:00");
         const dayEnd = new Date(dateStr + "T23:59:59-06:00");
         if (isNaN(dayStart.getTime())) {
@@ -435,47 +446,61 @@ export function setupSlackRoutes(app: Express) {
         const latest = String(dayEnd.getTime() / 1000);
 
         trackUser(msgUsername, false, true);
-        let allRawMessages: any[] = [];
-        let cursor: string | undefined;
-        let page = 0;
-        do {
-          const params: any = { channel: channelId, limit: 400, oldest, latest };
-          if (cursor) params.cursor = cursor;
-          const result = await client.conversations.history(params);
-          allRawMessages = allRawMessages.concat(result.messages || []);
-          cursor = result.has_more ? result.response_metadata?.next_cursor : undefined;
-          page++;
-        } while (cursor && page < 30);
-        allRawMessages.sort((a, b) => Number(a.ts) - Number(b.ts));
 
-        const msgByTs: Record<string, any> = {};
-        for (const msg of allRawMessages) {
-          msgByTs[msg.ts] = msg;
-        }
+        const fetchPromise: Promise<any[]> = (async () => {
+          let allRawMessages: any[] = [];
+          let cursor: string | undefined;
+          let page = 0;
+          do {
+            const params: any = { channel: channelId, limit: 400, oldest, latest };
+            if (cursor) params.cursor = cursor;
+            const result = await client.conversations.history(params);
+            allRawMessages = allRawMessages.concat(result.messages || []);
+            cursor = result.has_more ? result.response_metadata?.next_cursor : undefined;
+            page++;
+          } while (cursor && page < 30);
+          allRawMessages.sort((a, b) => Number(a.ts) - Number(b.ts));
 
-        const parentTsToFetch: string[] = [];
-        for (const msg of allRawMessages) {
-          if (msg.thread_ts && msg.thread_ts !== msg.ts && !msgByTs[msg.thread_ts]) {
-            const pk = parentCacheKey(channelId, msg.thread_ts);
-            if (forceRefresh || !parentMsgCache[pk]) {
-              if (!parentTsToFetch.includes(msg.thread_ts)) parentTsToFetch.push(msg.thread_ts);
+          const msgByTs: Record<string, any> = {};
+          for (const msg of allRawMessages) {
+            msgByTs[msg.ts] = msg;
+          }
+
+          const parentTsToFetch: string[] = [];
+          for (const msg of allRawMessages) {
+            if (msg.thread_ts && msg.thread_ts !== msg.ts && !msgByTs[msg.thread_ts]) {
+              const pk = parentCacheKey(channelId, msg.thread_ts);
+              if (forceRefresh || !parentMsgCache[pk]) {
+                if (!parentTsToFetch.includes(msg.thread_ts)) parentTsToFetch.push(msg.thread_ts);
+              }
             }
           }
-        }
 
-        const messages = allRawMessages.map((msg) => formatMessage(msg, channelId, msgByTs));
-        dateCache[cacheKey] = { data: messages, fetchedAt: Date.now() };
-        res.json(messages);
+          const messages = allRawMessages.map((msg) => formatMessage(msg, channelId, msgByTs));
+          dateCache[cacheKey] = { data: messages, fetchedAt: Date.now() };
+          delete dateFetching[cacheKey];
 
-        if (parentTsToFetch.length > 0) {
-          fetchAndCacheParents(client, channelId, parentTsToFetch)
-            .then(() => {
-              const updated = allRawMessages.map((msg) => formatMessage(msg, channelId, msgByTs));
-              dateCache[cacheKey] = { data: updated, fetchedAt: Date.now() };
-            })
-            .catch(() => {});
+          if (parentTsToFetch.length > 0) {
+            fetchAndCacheParents(client, channelId, parentTsToFetch)
+              .then(() => {
+                const updated = allRawMessages.map((msg) => formatMessage(msg, channelId, msgByTs));
+                dateCache[cacheKey] = { data: updated, fetchedAt: Date.now() };
+              })
+              .catch(() => {});
+          }
+
+          return messages;
+        })();
+
+        dateFetching[cacheKey] = fetchPromise;
+
+        try {
+          const messages = await fetchPromise;
+          return res.json(messages);
+        } catch (err: any) {
+          delete dateFetching[cacheKey];
+          return res.status(500).json({ message: err.message || "Failed to fetch messages" });
         }
-        return;
       }
 
       trackUser(msgUsername, false, true);
@@ -583,7 +608,7 @@ export function setupSlackRoutes(app: Express) {
     return TRACKER_PATTERNS.some((p) => lower.includes(p));
   }
   const replyScanCache: Record<string, { result: { matchedBy: string } | null; fetchedAt: number }> = {};
-  const REPLY_SCAN_CACHE_TTL = 5 * 60 * 1000;
+  const REPLY_SCAN_CACHE_TTL = 30 * 60 * 1000;
 
   app.post("/api/slack/clear-scan-cache", async (_req, res) => {
     for (const key of Object.keys(replyScanCache)) {
@@ -605,25 +630,7 @@ export function setupSlackRoutes(app: Express) {
       const userClient = await getUserSlackClient();
       const client = userClient || botClient;
 
-      if (!usersCache || (Date.now() - usersCache.fetchedAt) >= USERS_CACHE_TTL) {
-        const users: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
-        let cursor: string | undefined = undefined;
-        do {
-          const result: any = await botClient.users.list({ limit: 200, cursor });
-          for (const member of result.members || []) {
-            if (member.id) {
-              users[member.id] = {
-                name: member.name || member.id,
-                real_name: member.real_name || member.profile?.real_name || member.name || member.id,
-                display_name: member.profile?.display_name || "",
-                avatar: member.profile?.image_48 || "",
-              };
-            }
-          }
-          cursor = result.response_metadata?.next_cursor;
-        } while (cursor);
-        usersCache = { data: users, fetchedAt: Date.now() };
-      }
+      await ensureUsersCache(botClient);
 
       const karlaIds: string[] = [];
       const emilioIds: string[] = [];
@@ -762,6 +769,36 @@ export function setupSlackRoutes(app: Express) {
 
   let usersCache: { data: Record<string, { name: string; avatar: string; real_name: string; display_name: string }>; fetchedAt: number } | null = null;
   const USERS_CACHE_TTL = 30 * 60 * 1000;
+  let usersFetching: Promise<Record<string, { name: string; avatar: string; real_name: string; display_name: string }>> | null = null;
+
+  async function ensureUsersCache(client: any): Promise<Record<string, { name: string; avatar: string; real_name: string; display_name: string }>> {
+    if (usersCache && (Date.now() - usersCache.fetchedAt) < USERS_CACHE_TTL) {
+      return usersCache.data;
+    }
+    if (usersFetching) return usersFetching;
+    usersFetching = (async () => {
+      const allUsers: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
+      let cursor: string | undefined = undefined;
+      do {
+        const result: any = await client.users.list({ limit: 200, cursor });
+        for (const member of result.members || []) {
+          if (member.id) {
+            allUsers[member.id] = {
+              name: member.name || member.id,
+              real_name: member.real_name || member.profile?.real_name || member.name || member.id,
+              display_name: member.profile?.display_name || "",
+              avatar: member.profile?.image_48 || "",
+            };
+          }
+        }
+        cursor = result.response_metadata?.next_cursor;
+      } while (cursor);
+      usersCache = { data: allUsers, fetchedAt: Date.now() };
+      usersFetching = null;
+      return allUsers;
+    })();
+    return usersFetching;
+  }
 
   app.post("/api/slack/users/resolve", async (req, res) => {
     const client = await requireSlack(req, res);
@@ -803,27 +840,7 @@ export function setupSlackRoutes(app: Express) {
     const client = await requireSlack(req, res);
     if (!client) return;
     try {
-      const now = Date.now();
-      if (usersCache && (now - usersCache.fetchedAt) < USERS_CACHE_TTL) {
-        return res.json(usersCache.data);
-      }
-      const users: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
-      let cursor: string | undefined = undefined;
-      do {
-        const result: any = await client.users.list({ limit: 200, cursor });
-        for (const member of result.members || []) {
-          if (member.id) {
-            users[member.id] = {
-              name: member.name || member.id,
-              real_name: member.real_name || member.profile?.real_name || member.name || member.id,
-              display_name: member.profile?.display_name || "",
-              avatar: member.profile?.image_48 || "",
-            };
-          }
-        }
-        cursor = result.response_metadata?.next_cursor;
-      } while (cursor);
-      usersCache = { data: users, fetchedAt: now };
+      const users = await ensureUsersCache(client);
       return res.json(users);
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to fetch users" });
@@ -831,12 +848,14 @@ export function setupSlackRoutes(app: Express) {
   });
 
   const channelCache: Record<string, { messages: any[]; fetchedAt: number; fetching: Promise<any[]> | null }> = {};
-  const CACHE_TTL = 5 * 60 * 1000;
+  const CACHE_TTL_NO_SOCKET = 30 * 60 * 1000;
+  const CACHE_TTL_SOCKET = 2 * 60 * 60 * 1000;
 
   async function getChannelMessages(client: any, channelId: string): Promise<any[]> {
     const now = Date.now();
     const cached = channelCache[channelId];
-    if (cached && (now - cached.fetchedAt) < CACHE_TTL) {
+    const effectiveTTL = socketModeActive ? CACHE_TTL_SOCKET : CACHE_TTL_NO_SOCKET;
+    if (cached && (now - cached.fetchedAt) < effectiveTTL) {
       return cached.messages;
     }
     if (cached?.fetching) {
@@ -997,30 +1016,9 @@ export function setupSlackRoutes(app: Express) {
       let processedText = text.trim();
 
       let users: Record<string, { name: string; real_name: string; display_name: string; avatar?: string }> = {};
-      if (usersCache && (Date.now() - usersCache.fetchedAt) < USERS_CACHE_TTL) {
-        users = usersCache.data;
-      } else {
-        try {
-          const allUsers: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
-          let cursor: string | undefined = undefined;
-          do {
-            const result: any = await client.users.list({ limit: 200, cursor });
-            for (const member of result.members || []) {
-              if (member.id) {
-                allUsers[member.id] = {
-                  name: member.name || member.id,
-                  real_name: member.real_name || member.profile?.real_name || member.name || member.id,
-                  display_name: member.profile?.display_name || "",
-                  avatar: member.profile?.image_48 || "",
-                };
-              }
-            }
-            cursor = result.response_metadata?.next_cursor;
-          } while (cursor);
-          usersCache = { data: allUsers, fetchedAt: Date.now() };
-          users = allUsers;
-        } catch {}
-      }
+      try {
+        users = await ensureUsersCache(client);
+      } catch {}
 
       const allNameEntries: { id: string; nameStr: string }[] = [];
       for (const [id, u] of Object.entries(users)) {
@@ -1082,30 +1080,9 @@ export function setupSlackRoutes(app: Express) {
       let processedText = text.trim();
 
       let users: Record<string, { name: string; real_name: string; display_name: string }> = {};
-      if (usersCache && (Date.now() - usersCache.fetchedAt) < USERS_CACHE_TTL) {
-        users = usersCache.data;
-      } else {
-        try {
-          const allUsers: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
-          let cursor: string | undefined = undefined;
-          do {
-            const result: any = await client.users.list({ limit: 200, cursor });
-            for (const member of result.members || []) {
-              if (member.id) {
-                allUsers[member.id] = {
-                  name: member.name || member.id,
-                  real_name: member.real_name || member.profile?.real_name || member.name || member.id,
-                  display_name: member.profile?.display_name || "",
-                  avatar: member.profile?.image_48 || "",
-                };
-              }
-            }
-            cursor = result.response_metadata?.next_cursor;
-          } while (cursor);
-          usersCache = { data: allUsers, fetchedAt: Date.now() };
-          users = allUsers;
-        } catch {}
-      }
+      try {
+        users = await ensureUsersCache(client);
+      } catch {}
 
       const allNameEntries: { id: string; nameStr: string }[] = [];
       for (const [id, u] of Object.entries(users)) {
@@ -1451,28 +1428,9 @@ export function setupSlackRoutes(app: Express) {
       const channelId = "C09KBS41YHH";
 
       let users: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
-      if (usersCache && (Date.now() - usersCache.fetchedAt) < USERS_CACHE_TTL) {
-        users = usersCache.data;
-      } else {
-        const allUsers: Record<string, { name: string; avatar: string; real_name: string; display_name: string }> = {};
-        let cursor: string | undefined = undefined;
-        do {
-          const result: any = await client.users.list({ limit: 200, cursor });
-          for (const member of result.members || []) {
-            if (member.id) {
-              allUsers[member.id] = {
-                name: member.name || member.id,
-                real_name: member.real_name || member.profile?.real_name || member.name || member.id,
-                display_name: member.profile?.display_name || "",
-                avatar: member.profile?.image_48 || "",
-              };
-            }
-          }
-          cursor = result.response_metadata?.next_cursor;
-        } while (cursor);
-        usersCache = { data: allUsers, fetchedAt: Date.now() };
-        users = allUsers;
-      }
+      try {
+        users = await ensureUsersCache(client);
+      } catch {}
 
       const targetIds: { userId: string; label: string }[] = [];
       for (const [id, u] of Object.entries(users)) {
