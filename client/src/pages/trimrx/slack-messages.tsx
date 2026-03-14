@@ -1606,15 +1606,6 @@ export default function SlackMessagesPage() {
               </Button>
             </>
           )}
-          <Button
-            variant={expandAllReplies ? "default" : "outline"}
-            size="sm"
-            onClick={() => setExpandAllReplies((prev) => !prev)}
-            data-testid="button-expand-all-replies"
-          >
-            {expandAllReplies ? <ChevronUp className="h-4 w-4 mr-1.5" /> : <ChevronDown className="h-4 w-4 mr-1.5" />}
-            {expandAllReplies ? "Collapse All" : "Expand All"}
-          </Button>
         </div>
         <div className="flex items-center gap-2">
           {can("slack-messages", "bulk-done") && filteredMessages.length > 0 && Object.keys(cvStatusMap).length > 0 && (
