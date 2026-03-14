@@ -353,7 +353,7 @@ export function setupSlackRoutes(app: Express) {
   app.get("/api/slack/oauth-install-url", async (req, res) => {
     const clientId = await storage.getSetting(SLACK_CLIENT_ID_KEY);
     if (!clientId) return res.status(400).json({ message: "Client ID not configured" });
-    const domain = process.env.REPLIT_DEV_DOMAIN || req.get("host");
+    const domain = req.get("x-forwarded-host") || req.get("host") || process.env.REPLIT_DEV_DOMAIN;
     const redirectUri = `https://${domain}/api/slack/oauth-callback`;
     const userScopes = "channels:history,users:read,search:read,channels:read";
     const url = `https://slack.com/oauth/v2/authorize?client_id=${encodeURIComponent(clientId)}&user_scope=${encodeURIComponent(userScopes)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
@@ -369,7 +369,7 @@ export function setupSlackRoutes(app: Express) {
     const clientId = await storage.getSetting(SLACK_CLIENT_ID_KEY);
     const clientSecret = await storage.getSetting(SLACK_CLIENT_SECRET_KEY);
     if (!clientId || !clientSecret) return res.status(400).send(html("Not configured", "OAuth credentials are not set up. Configure them in the Integrations page first."));
-    const domain = process.env.REPLIT_DEV_DOMAIN || req.get("host");
+    const domain = req.get("x-forwarded-host") || req.get("host") || process.env.REPLIT_DEV_DOMAIN;
     const redirectUri = `https://${domain}/api/slack/oauth-callback`;
     try {
       const response = await fetch("https://slack.com/api/oauth.v2.access", {
