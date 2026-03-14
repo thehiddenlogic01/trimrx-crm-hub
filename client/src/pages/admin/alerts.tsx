@@ -25,6 +25,9 @@ import {
   RefreshCw,
   Pencil,
   RotateCcw,
+  Megaphone,
+  Code2,
+  ShieldAlert,
 } from "lucide-react";
 
 interface AlertConfig {
@@ -72,6 +75,33 @@ const INTERVAL_OPTIONS = [
   { value: "1440", label: "Every 24 hours" },
 ];
 
+const NOTICE_TEMPLATES = [
+  {
+    id: "dev-update",
+    label: "🛠 Dev Update",
+    category: "dev",
+    text: `🛠 *TrimRX Dev Update*\n\nA system update has been deployed successfully.\n\n📋 *Changes:*\n• [Describe what was updated]\n\n✅ Everything is running normally. No action needed.\n\n— Dev Team`,
+  },
+  {
+    id: "dev-maintenance",
+    label: "🔧 Maintenance Notice",
+    category: "dev",
+    text: `🔧 *Scheduled Maintenance Notice*\n\nWe will be performing scheduled maintenance:\n📅 Date: [DATE]\n⏰ Time: [START TIME] → [END TIME] (GT)\n\nSome features may be temporarily unavailable during this window.\n\nWe apologize for any inconvenience.\n\n— Dev Team`,
+  },
+  {
+    id: "admin-urgent",
+    label: "🚨 Urgent Notice",
+    category: "admin",
+    text: `🚨 *URGENT NOTICE — Action Required*\n\n📌 *Details:*\n[Describe the situation here]\n\n⚡ Please respond as soon as possible.\n📞 Contact: [Name / channel]\n\n— Admin`,
+  },
+  {
+    id: "admin-announcement",
+    label: "📢 Admin Announcement",
+    category: "admin",
+    text: `📢 *Team Announcement*\n\n[Write your announcement here]\n\n📅 Effective: [Date / Time if relevant]\n\nThank you for your attention.\n\n— Admin`,
+  },
+];
+
 const GT_TZ = "America/Guatemala";
 
 function getGuatemalaDate(): string {
@@ -99,6 +129,10 @@ export default function AlertsPage() {
   const [manualFromTime, setManualFromTime] = useState("00:00");
   const [manualToTime, setManualToTime] = useState(getGuatemalaTime);
   const [initialized, setInitialized] = useState(false);
+
+  // Notice sender state
+  const [noticeTemplate, setNoticeTemplate] = useState("");
+  const [noticeText, setNoticeText] = useState("");
 
   // Preview message state
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
@@ -188,6 +222,21 @@ export default function AlertsPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/audit-alerts/config"] });
       } else {
         toast({ title: data.message || "No logs to report", variant: "destructive" });
+      }
+    },
+    onError: (err: Error) => toast({ title: "Send failed", description: err.message, variant: "destructive" }),
+  });
+
+  const sendNoticeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/audit-alerts/send-now", { customMessage: noticeText.trim() });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      if (data.sent) {
+        toast({ title: "Notice sent to Telegram! ✅" });
+      } else {
+        toast({ title: data.message || "Failed to send", variant: "destructive" });
       }
     },
     onError: (err: Error) => toast({ title: "Send failed", description: err.message, variant: "destructive" }),
@@ -466,6 +515,92 @@ export default function AlertsPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Megaphone className="h-4 w-4" />
+            Send Notice to Telegram
+          </CardTitle>
+          <CardDescription>Send a manual notice to your Telegram group — choose a Dev or Admin template, edit, then send</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Select Template</Label>
+            <Select
+              value={noticeTemplate}
+              onValueChange={(val) => {
+                setNoticeTemplate(val);
+                const tpl = NOTICE_TEMPLATES.find((t) => t.id === val);
+                if (tpl) setNoticeText(tpl.text);
+              }}
+            >
+              <SelectTrigger data-testid="select-notice-template">
+                <SelectValue placeholder="Choose a template..." />
+              </SelectTrigger>
+              <SelectContent>
+                <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Code2 className="h-3 w-3" /> Dev Templates
+                </div>
+                {NOTICE_TEMPLATES.filter((t) => t.category === "dev").map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                ))}
+                <div className="px-2 py-1 mt-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1 border-t">
+                  <ShieldAlert className="h-3 w-3" /> Admin Templates
+                </div>
+                {NOTICE_TEMPLATES.filter((t) => t.category === "admin").map((t) => (
+                  <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {noticeText && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Message</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-muted-foreground"
+                  onClick={() => {
+                    const tpl = NOTICE_TEMPLATES.find((t) => t.id === noticeTemplate);
+                    if (tpl) setNoticeText(tpl.text);
+                  }}
+                  data-testid="button-reset-notice"
+                >
+                  <RotateCcw className="h-3 w-3 mr-1" />
+                  Reset
+                </Button>
+              </div>
+              <Textarea
+                value={noticeText}
+                onChange={(e) => setNoticeText(e.target.value)}
+                className="font-mono text-[12px] leading-relaxed min-h-[180px] resize-y"
+                placeholder="Write your message here..."
+                data-testid="textarea-notice-text"
+              />
+              <p className="text-[11px] text-muted-foreground">Supports Telegram markdown: *bold*, _italic_, `code`</p>
+            </div>
+          )}
+
+          <Button
+            onClick={() => sendNoticeMutation.mutate()}
+            disabled={sendNoticeMutation.isPending || !isConnected || !noticeText.trim()}
+            className="w-full"
+            data-testid="button-send-notice"
+          >
+            {sendNoticeMutation.isPending
+              ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Sending...</>
+              : <><Send className="h-4 w-4 mr-1.5" />Send Notice to Telegram</>
+            }
+          </Button>
+
+          {!isConnected && (
+            <p className="text-xs text-amber-600 text-center">Configure Telegram Bot Token and Chat ID first</p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
