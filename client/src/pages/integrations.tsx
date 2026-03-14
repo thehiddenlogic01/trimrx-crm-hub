@@ -30,6 +30,8 @@ import {
   ChevronUp,
   Link2,
   Unlink,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
 import { SiOpenai, SiGoogle, SiStripe, SiSlack } from "react-icons/si";
 
@@ -96,6 +98,8 @@ function SlackSection() {
   const [botToken, setBotToken] = useState("");
   const [userTokenInputs, setUserTokenInputs] = useState(["", "", ""]);
   const [appToken, setAppToken] = useState("");
+  const [oauthClientId, setOauthClientId] = useState("");
+  const [oauthClientSecret, setOauthClientSecret] = useState("");
 
   type SlackStatus = {
     connected: boolean;
@@ -173,6 +177,31 @@ function SlackSection() {
       queryClient.invalidateQueries({ queryKey: ["/api/slack/status"] });
       toast({ title: "Socket Mode disconnected" });
     },
+  });
+
+  const { data: oauthCreds } = useQuery<{ hasCredentials: boolean; clientIdPreview: string | null }>({
+    queryKey: ["/api/slack/oauth-credentials"],
+    refetchInterval: 30000,
+  });
+
+  const { data: installUrl } = useQuery<{ url: string; redirectUri: string }>({
+    queryKey: ["/api/slack/oauth-install-url"],
+    enabled: !!(oauthCreds?.hasCredentials),
+  });
+
+  const saveCredsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/slack/set-oauth-credentials", { clientId: oauthClientId, clientSecret: oauthClientSecret });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/oauth-credentials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/oauth-install-url"] });
+      toast({ title: "OAuth credentials saved" });
+      setOauthClientId("");
+      setOauthClientSecret("");
+    },
+    onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
 
   const connected = status?.connected || false;
@@ -296,6 +325,104 @@ function SlackSection() {
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {connected && (
+          <div className="space-y-3 pt-2 border-t">
+            <div>
+              <Label className="text-sm font-medium">OAuth Quick Install — Add Other Users</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Let other Slack workspace members authorize with one click. Get Client ID &amp; Secret from <strong>api.slack.com → Basic Information</strong>.
+              </p>
+            </div>
+            {!oauthCreds?.hasCredentials ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Client ID</Label>
+                    <Input
+                      placeholder="1234567890.123..."
+                      value={oauthClientId}
+                      onChange={(e) => setOauthClientId(e.target.value)}
+                      data-testid="input-oauth-client-id"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Client Secret</Label>
+                    <Input
+                      type="password"
+                      placeholder="••••••••••••"
+                      value={oauthClientSecret}
+                      onChange={(e) => setOauthClientSecret(e.target.value)}
+                      data-testid="input-oauth-client-secret"
+                    />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => saveCredsMutation.mutate()}
+                  disabled={!oauthClientId.trim() || !oauthClientSecret.trim() || saveCredsMutation.isPending}
+                  data-testid="button-save-oauth-credentials"
+                >
+                  {saveCredsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                  Save Credentials
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border text-sm">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                  <span>Credentials saved <span className="text-muted-foreground">({oauthCreds.clientIdPreview})</span></span>
+                </div>
+                {installUrl && (
+                  <div className="space-y-2">
+                    <div className="rounded-lg border p-3 space-y-2 bg-amber-50 dark:bg-amber-950/20">
+                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Step 1 — Add this Redirect URL in Slack</p>
+                      <p className="text-xs text-muted-foreground">Manage Distribution → Add OAuth Redirect URLs → paste this:</p>
+                      <div className="flex gap-2">
+                        <Input readOnly value={installUrl.redirectUri} className="text-xs font-mono h-7" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 shrink-0"
+                          onClick={() => { navigator.clipboard.writeText(installUrl.redirectUri); toast({ title: "Redirect URL copied!" }); }}
+                          data-testid="button-copy-redirect-url"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <p className="text-xs font-semibold">Step 2 — Share this install link</p>
+                      <p className="text-xs text-muted-foreground">Send this link to each Slack teammate. They click it, click Allow, done — their token saves automatically to the next empty slot.</p>
+                      <div className="flex gap-2">
+                        <Input readOnly value={installUrl.url} className="text-xs h-7" />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 shrink-0"
+                          onClick={() => { navigator.clipboard.writeText(installUrl.url); toast({ title: "Install link copied!" }); }}
+                          data-testid="button-copy-install-url"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 shrink-0"
+                          onClick={() => window.open(installUrl.url, "_blank")}
+                          data-testid="button-open-install-url"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

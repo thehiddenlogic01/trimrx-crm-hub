@@ -325,6 +325,73 @@ export function setupSlackRoutes(app: Express) {
     return res.json({ connected: false });
   });
 
+  const SLACK_CLIENT_ID_KEY = "slack_client_id";
+  const SLACK_CLIENT_SECRET_KEY = "slack_client_secret";
+
+  app.post("/api/slack/set-oauth-credentials", async (req, res) => {
+    const { clientId, clientSecret } = req.body;
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({ message: "Client ID and Client Secret are required" });
+    }
+    await storage.setSetting(SLACK_CLIENT_ID_KEY, clientId.trim());
+    await storage.setSetting(SLACK_CLIENT_SECRET_KEY, clientSecret.trim());
+    return res.json({ saved: true });
+  });
+
+  app.get("/api/slack/oauth-credentials", async (_req, res) => {
+    const clientId = await storage.getSetting(SLACK_CLIENT_ID_KEY);
+    const clientSecret = await storage.getSetting(SLACK_CLIENT_SECRET_KEY);
+    return res.json({ hasCredentials: !!(clientId && clientSecret), clientIdPreview: clientId ? clientId.slice(0, 10) + "..." : null });
+  });
+
+  app.get("/api/slack/oauth-install-url", async (req, res) => {
+    const clientId = await storage.getSetting(SLACK_CLIENT_ID_KEY);
+    if (!clientId) return res.status(400).json({ message: "Client ID not configured" });
+    const domain = process.env.REPLIT_DEV_DOMAIN || req.get("host");
+    const redirectUri = `https://${domain}/api/slack/oauth-callback`;
+    const userScopes = "channels:history,users:read,search:read,channels:read";
+    const url = `https://slack.com/oauth/v2/authorize?client_id=${encodeURIComponent(clientId)}&user_scope=${encodeURIComponent(userScopes)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    return res.json({ url, redirectUri });
+  });
+
+  app.get("/api/slack/oauth-callback", async (req, res) => {
+    const { code, error } = req.query;
+    const html = (title: string, body: string) =>
+      `<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:420px;margin:80px auto;text-align:center;color:#1a1a1a"><h2>${title}</h2><p style="color:#555">${body}</p></body></html>`;
+    if (error) return res.send(html("Authorization cancelled", `Slack returned: ${error}. You can close this tab.`));
+    if (!code) return res.status(400).send(html("Missing code", "No authorization code received."));
+    const clientId = await storage.getSetting(SLACK_CLIENT_ID_KEY);
+    const clientSecret = await storage.getSetting(SLACK_CLIENT_SECRET_KEY);
+    if (!clientId || !clientSecret) return res.status(400).send(html("Not configured", "OAuth credentials are not set up. Configure them in the Integrations page first."));
+    const domain = process.env.REPLIT_DEV_DOMAIN || req.get("host");
+    const redirectUri = `https://${domain}/api/slack/oauth-callback`;
+    try {
+      const response = await fetch("https://slack.com/api/oauth.v2.access", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code: code as string, redirect_uri: redirectUri }),
+      });
+      const data: any = await response.json();
+      if (!data.ok) return res.send(html("❌ Error", `Slack error: ${data.error}. You can close this tab.`));
+      const userToken = data.authed_user?.access_token;
+      if (!userToken) return res.send(html("⚠️ No user token", "Make sure <strong>User Token Scopes</strong> are added in your Slack app → OAuth &amp; Permissions."));
+      let savedSlot = -1;
+      for (let i = 0; i < USER_TOKEN_KEYS.length; i++) {
+        const existing = await storage.getSetting(USER_TOKEN_KEYS[i]);
+        if (!existing) {
+          await storage.setSetting(USER_TOKEN_KEYS[i], userToken);
+          savedSlot = i + 1;
+          break;
+        }
+      }
+      invalidateUserTokensCache();
+      if (savedSlot === -1) return res.send(html("⚠️ All slots full", "All 3 user token slots are in use. Remove one from the Integrations page first, then try again."));
+      return res.send(html("✅ Connected!", `Your Slack account was added to <strong>User ${savedSlot}</strong> slot. You can close this tab — the token is live.`));
+    } catch (err: any) {
+      return res.status(500).send(html("Server error", err.message));
+    }
+  });
+
   app.get("/api/slack/events", (req, res) => {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
