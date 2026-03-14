@@ -40,6 +40,7 @@ import {
   CreditCard,
   DollarSign,
   HelpCircle,
+  Power,
 } from "lucide-react";
 
 const CHANNEL_ID = "C09KBS41YHH";
@@ -771,6 +772,7 @@ export default function SlackMessagesPage() {
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState("");
+  const [showRecentMessages, setShowRecentMessages] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -810,8 +812,8 @@ export default function SlackMessagesPage() {
       if (!res.ok) throw new Error("Failed to fetch messages");
       return res.json();
     },
-    enabled: slackStatus?.connected === true,
-    refetchInterval: dateFilter ? false : 30000,
+    enabled: slackStatus?.connected === true && (!!dateFilter || showRecentMessages),
+    refetchInterval: (dateFilter || !showRecentMessages) ? false : 30000,
   });
 
   useEffect(() => {
@@ -1472,12 +1474,27 @@ export default function SlackMessagesPage() {
             </PopoverContent>
           </Popover>
           )}
+          {!dateFilter && (
+            <Button
+              variant={showRecentMessages ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowRecentMessages((v) => !v)}
+              data-testid="button-toggle-recent-messages"
+              className={showRecentMessages ? "" : "text-muted-foreground"}
+            >
+              <Power className={`h-4 w-4 mr-1.5 ${showRecentMessages ? "" : "opacity-50"}`} />
+              {showRecentMessages ? "Recent (50) On" : "Recent (50) Off"}
+            </Button>
+          )}
           <div className="relative">
             <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               type="date"
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                if (e.target.value) setShowRecentMessages(false);
+              }}
               className="pl-9 pr-8 h-9 w-[180px]"
               data-testid="input-date-filter"
             />
@@ -1653,7 +1670,26 @@ export default function SlackMessagesPage() {
         </div>
       )}
 
-      {(loadingMessages && !messages) || (isSearchMode && loadingSearch) ? (
+      {!dateFilter && !showRecentMessages ? (
+        <Card data-testid="card-idle-state">
+          <CardContent className="flex flex-col items-center justify-center py-14 gap-4">
+            <Power className="h-8 w-8 text-muted-foreground/40" />
+            <div className="text-center space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">No messages loaded</p>
+              <p className="text-xs text-muted-foreground/70">Turn on "Recent (50)" to load the latest messages, or pick a date above.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRecentMessages(true)}
+              data-testid="button-idle-load-recent"
+            >
+              <Power className="h-4 w-4 mr-1.5" />
+              Turn On Recent (50)
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (loadingMessages && !messages) || (isSearchMode && loadingSearch) ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
