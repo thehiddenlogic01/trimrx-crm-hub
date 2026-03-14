@@ -46,6 +46,7 @@ import {
   AlertTriangle,
   HelpCircle,
   ListChecks,
+  Power,
 } from "lucide-react";
 
 const CHANNEL_ID = "C09KBS41YHH";
@@ -854,6 +855,7 @@ export default function SlackMessagesPage() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyBroadcast, setReplyBroadcast] = useState(false);
   const [dateFilter, setDateFilter] = useState("");
+  const [showRecentMessages, setShowRecentMessages] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -970,8 +972,8 @@ export default function SlackMessagesPage() {
       if (!res.ok) throw new Error("Failed to fetch messages");
       return res.json();
     },
-    enabled: slackStatus?.connected === true,
-    refetchInterval: 60000,
+    enabled: slackStatus?.connected === true && (!!dateFilter || showRecentMessages),
+    refetchInterval: (dateFilter || !showRecentMessages) ? false : 60000,
   });
 
   useEffect(() => {
@@ -1871,12 +1873,27 @@ export default function SlackMessagesPage() {
           </Popover>
           )}
           <div className="flex items-center gap-1.5">
+            {!dateFilter && (
+              <Button
+                variant={showRecentMessages ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowRecentMessages((v) => !v)}
+                data-testid="button-toggle-recent-messages"
+                className={showRecentMessages ? "" : "text-muted-foreground"}
+              >
+                <Power className={`h-4 w-4 mr-1.5 ${showRecentMessages ? "" : "opacity-50"}`} />
+                {showRecentMessages ? "Messages On" : "Messages Off"}
+              </Button>
+            )}
             <div className="relative">
               <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <Input
                 type="date"
                 value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
+                onChange={(e) => {
+                  setDateFilter(e.target.value);
+                  if (e.target.value) setShowRecentMessages(false);
+                }}
                 className="pl-9 pr-8 h-9 w-[180px]"
                 data-testid="input-date-filter"
               />
@@ -1890,7 +1907,7 @@ export default function SlackMessagesPage() {
                 </button>
               )}
             </div>
-            {dateFilter && slackStatus?.socketModeActive && (
+            {slackStatus?.socketModeActive && (showRecentMessages || dateFilter) && (
               <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium" title="Receiving live updates via Socket Mode">
                 <span className="inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                 Live
@@ -2097,7 +2114,26 @@ export default function SlackMessagesPage() {
         </div>
       )}
 
-      {(loadingMessages && !messages) || (isSearchMode && loadingSearch) ? (
+      {!dateFilter && !showRecentMessages ? (
+        <Card data-testid="card-idle-state">
+          <CardContent className="flex flex-col items-center justify-center py-14 gap-4">
+            <Power className="h-8 w-8 text-muted-foreground/40" />
+            <div className="text-center space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">No messages loaded</p>
+              <p className="text-xs text-muted-foreground/70">Turn on "Messages" to load the full backlog, or pick a date above.</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRecentMessages(true)}
+              data-testid="button-idle-load-messages"
+            >
+              <Power className="h-4 w-4 mr-1.5" />
+              Turn On Messages
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (loadingMessages && !messages) || (isSearchMode && loadingSearch) ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
