@@ -789,6 +789,9 @@ export default function SlackMessagesPage() {
   const [trackerMatchMap, setTrackerMatchMap] = useState<Record<string, Record<string, string> | null>>({});
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
   const [trackerFilter, setTrackerFilter] = useState("all");
+  const [skipCvData, setSkipCvData] = useState(false);
+  const [skipCvLoading, setSkipCvLoading] = useState(false);
+  const [skipCvTsSet, setSkipCvTsSet] = useState<Set<string>>(new Set());
 
   const { data: slackStatus } = useQuery<{ connected: boolean; team?: string; socketModeActive?: boolean }>({
     queryKey: ["/api/slack/status"],
@@ -1073,6 +1076,40 @@ export default function SlackMessagesPage() {
     }
   };
 
+  const toggleSkipCvData = async () => {
+    if (skipCvData) {
+      setSkipCvData(false);
+      return;
+    }
+    if (!messages || messages.length === 0) {
+      toast({ title: "No messages loaded to filter" });
+      return;
+    }
+    setSkipCvLoading(true);
+    try {
+      const res = await apiRequest("GET", "/api/cv-reports");
+      const cvReports: { caseId: string; link: string }[] = await res.json();
+      const cvCaseIds = new Set(cvReports.map((r) => (r.caseId || "").trim().toUpperCase()).filter(Boolean));
+      const cvLinks = new Set(cvReports.map((r) => (r.link || "").trim().toLowerCase()).filter(Boolean));
+      const matched = new Set<string>();
+      for (const msg of messages) {
+        const extracted = extractCaseFromSlackMsg(msg.text);
+        if (extracted?.caseId && cvCaseIds.has(extracted.caseId.trim().toUpperCase())) {
+          matched.add(msg.ts);
+        } else if (extracted?.link && cvLinks.has(extracted.link.trim().toLowerCase())) {
+          matched.add(msg.ts);
+        }
+      }
+      setSkipCvTsSet(matched);
+      setSkipCvData(true);
+      toast({ title: `Skip CV Data: hiding ${matched.size} message${matched.size !== 1 ? "s" : ""} already in CV Report` });
+    } catch (err: any) {
+      toast({ title: "Failed to load CV Report data", description: err.message, variant: "destructive" });
+    } finally {
+      setSkipCvLoading(false);
+    }
+  };
+
   const toggleSelectMessage = (ts: string) => {
     setSelectedMessages((prev) => {
       const next = new Set(prev);
@@ -1339,6 +1376,7 @@ export default function SlackMessagesPage() {
         }
       }
     }
+    if (skipCvData && skipCvTsSet.has(msg.ts)) return false;
     return true;
   });
 
@@ -1556,6 +1594,19 @@ export default function SlackMessagesPage() {
             >
               {trackerMatchLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Database className="h-4 w-4 mr-1.5" />}
               Match Data
+            </Button>
+          )}
+          {can("slack-messages", "top-toolbar-tools") && (
+            <Button
+              variant={skipCvData ? "default" : "outline"}
+              size="sm"
+              onClick={toggleSkipCvData}
+              disabled={skipCvLoading || !messages || messages.length === 0}
+              data-testid="button-skip-cv-data"
+              className={skipCvData ? "bg-orange-600 hover:bg-orange-700 text-white border-orange-600" : ""}
+            >
+              {skipCvLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileText className="h-4 w-4 mr-1.5" />}
+              {skipCvData ? `Skip CV Data (${skipCvTsSet.size} hidden)` : "Skip CV Data"}
             </Button>
           )}
           {Object.keys(cvStatusMap).length > 0 && (
