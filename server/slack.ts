@@ -344,6 +344,12 @@ export function setupSlackRoutes(app: Express) {
     return res.json({ hasCredentials: !!(clientId && clientSecret), clientIdPreview: clientId ? clientId.slice(0, 10) + "..." : null });
   });
 
+  app.post("/api/slack/clear-oauth-credentials", async (_req, res) => {
+    await storage.deleteSetting(SLACK_CLIENT_ID_KEY);
+    await storage.deleteSetting(SLACK_CLIENT_SECRET_KEY);
+    return res.json({ cleared: true });
+  });
+
   app.get("/api/slack/oauth-install-url", async (req, res) => {
     const clientId = await storage.getSetting(SLACK_CLIENT_ID_KEY);
     if (!clientId) return res.status(400).json({ message: "Client ID not configured" });

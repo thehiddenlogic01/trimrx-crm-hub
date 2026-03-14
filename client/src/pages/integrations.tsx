@@ -204,6 +204,15 @@ function SlackSection() {
     onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
 
+  const clearCredsMutation = useMutation({
+    mutationFn: async () => { await apiRequest("POST", "/api/slack/clear-oauth-credentials", {}); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/oauth-credentials"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/slack/oauth-install-url"] });
+      toast({ title: "OAuth credentials removed" });
+    },
+  });
+
   const connected = status?.connected || false;
   const userTokens = status?.userTokens || [{ slot: 1, connected: false }, { slot: 2, connected: false }, { slot: 3, connected: false }];
   const activeCount = userTokens.filter(t => t.connected).length;
@@ -375,6 +384,16 @@ function SlackSection() {
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border text-sm">
                   <CheckCircle2 className="h-3.5 w-3.5 text-green-600 shrink-0" />
                   <span>Credentials saved <span className="text-muted-foreground">({oauthCreds.clientIdPreview})</span></span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto h-6 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={() => clearCredsMutation.mutate()}
+                    disabled={clearCredsMutation.isPending}
+                    data-testid="button-clear-oauth-credentials"
+                  >
+                    {clearCredsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Remove"}
+                  </Button>
                 </div>
                 {installUrl && (
                   <div className="space-y-2">
