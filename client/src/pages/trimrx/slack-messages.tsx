@@ -788,8 +788,9 @@ export default function SlackMessagesPage() {
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
   const [trackerFilter, setTrackerFilter] = useState("all");
 
-  const { data: slackStatus } = useQuery<{ connected: boolean; team?: string }>({
+  const { data: slackStatus } = useQuery<{ connected: boolean; team?: string; socketModeActive?: boolean }>({
     queryKey: ["/api/slack/status"],
+    refetchInterval: 30000,
   });
 
   const forceRefreshRef = useRef(false);
@@ -814,24 +815,44 @@ export default function SlackMessagesPage() {
   });
 
   useEffect(() => {
+    const es = new EventSource("/api/slack/events");
+    es.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data);
+        if (event.channelId !== CHANNEL_ID) return;
+        if (event.type === "new_message") {
+          queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "messages"] });
+        } else if (event.type === "reply" && event.threadTs) {
+          queryClient.invalidateQueries({ queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", event.threadTs] });
+        }
+      } catch {}
+    };
+    return () => es.close();
+  }, []);
+
+  const prefetchTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    prefetchTimersRef.current.forEach(clearTimeout);
+    prefetchTimersRef.current = [];
     if (!messages || messages.length === 0) return;
-    const threadsWithReplies = messages.filter((m) => m.reply_count > 0).slice(0, 15);
-    threadsWithReplies.forEach((msg, i) => {
-      const qk = ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts];
-      const existing = queryClient.getQueryData(qk);
-      if (existing) return;
-      setTimeout(() => {
+    const candidates = messages
+      .filter((m) => m.reply_count > 0 && !queryClient.getQueryData(["/api/slack/channels", CHANNEL_ID, "replies", m.ts]))
+      .slice(0, 5);
+    candidates.forEach((msg, i) => {
+      const t = setTimeout(() => {
         queryClient.prefetchQuery({
-          queryKey: qk,
+          queryKey: ["/api/slack/channels", CHANNEL_ID, "replies", msg.ts],
           queryFn: async () => {
             const res = await fetch(`/api/slack/channels/${CHANNEL_ID}/replies/${msg.ts}`);
             if (!res.ok) throw new Error("Failed to prefetch replies");
             return res.json();
           },
-          staleTime: 3 * 60 * 1000,
+          staleTime: 5 * 60 * 1000,
         });
-      }, 500 + i * 300);
+      }, i * 5000);
+      prefetchTimersRef.current.push(t);
     });
+    return () => { prefetchTimersRef.current.forEach(clearTimeout); };
   }, [messages]);
 
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -1470,6 +1491,12 @@ export default function SlackMessagesPage() {
               </button>
             )}
           </div>
+          {slackStatus?.socketModeActive && (
+            <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 gap-1.5 h-9 px-3" data-testid="badge-live-socket">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              Live
+            </Badge>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -1676,6 +1703,7 @@ export default function SlackMessagesPage() {
               showCheckbox={Object.keys(cvStatusMap).length > 0}
               isSelected={selectedMessages.has(msg.ts)}
               onToggleSelect={() => toggleSelectMessage(msg.ts)}
+              socketModeActive={slackStatus?.socketModeActive}
             />
           ))}
         </div>
@@ -1952,6 +1980,7 @@ function MessageCard({
   isSelected,
   onToggleSelect,
   expandIndex = 0,
+  socketModeActive,
 }: {
   msg: SlackMessage;
   getUserName: (id: string) => string;
@@ -1976,6 +2005,7 @@ function MessageCard({
   showCheckbox?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  socketModeActive?: boolean;
 }) {
   const { can } = usePermissions();
   const { user } = useAuth();
@@ -2087,6 +2117,7 @@ function MessageCard({
     enabled: isExpanded && expandReady && msg.reply_count > 0,
     retry: 1,
     staleTime: 3 * 60 * 1000,
+    refetchInterval: isExpanded ? 5 * 60 * 1000 : false,
   });
 
   const isReply = msg.thread_ts && msg.thread_ts !== msg.ts;
@@ -2340,6 +2371,7 @@ function MessageCard({
             >
               <MessageCircle className="h-3.5 w-3.5 mr-1" />
               {msg.reply_count} {msg.reply_count === 1 ? "reply" : "replies"}
+              {socketModeActive && <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse ml-1" />}
               {isExpanded ? <ChevronUp className="h-3.5 w-3.5 ml-1" /> : <ChevronDown className="h-3.5 w-3.5 ml-1" />}
             </Button>
           )}
@@ -2366,6 +2398,12 @@ function MessageCard({
 
         {isExpanded && (
           <div className="ml-4 pl-4 space-y-0 pt-2 border-l-2 border-border">
+            {socketModeActive && (
+              <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 pb-1.5" data-testid="text-live-replies">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                Live — new replies appear automatically
+              </div>
+            )}
             {loadingReplies ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
