@@ -771,24 +771,55 @@ export default function SlackMessagesPage() {
   const [expandAllReplies, setExpandAllReplies] = useState(false);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState("");
+  const lsGet = <T,>(key: string, fallback: T): T => {
+    try { const raw = localStorage.getItem(key); return raw !== null ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
+  };
+  const lsSet = (key: string, val: any) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
+
+  const [dateFilter, _setDateFilter] = useState(() => lsGet("sm_dateFilter", ""));
+  const setDateFilter = (v: string) => { _setDateFilter(v); lsSet("sm_dateFilter", v); };
+
   const [showRecentMessages, setShowRecentMessages] = useState(false);
-  const [mentionFilter, setMentionFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [hideReplies, setHideReplies] = useState(false);
+
+  const [mentionFilter, _setMentionFilter] = useState(() => lsGet("sm_mentionFilter", "all"));
+  const setMentionFilter = (v: string) => { _setMentionFilter(v); lsSet("sm_mentionFilter", v); };
+
+  const [statusFilter, _setStatusFilter] = useState(() => lsGet("sm_statusFilter", "all"));
+  const setStatusFilter = (v: string) => { _setStatusFilter(v); lsSet("sm_statusFilter", v); };
+
+  const [searchQuery, _setSearchQuery] = useState(() => lsGet("sm_searchQuery", ""));
+  const setSearchQuery = (v: string) => { _setSearchQuery(v); lsSet("sm_searchQuery", v); };
+
+  const [hideReplies, _setHideReplies] = useState(() => lsGet("sm_hideReplies", false));
+  const setHideReplies = (v: boolean) => { _setHideReplies(v); lsSet("sm_hideReplies", v); };
+
   const [cvStatusMap, setCvStatusMap] = useState<Record<string, { status: string; caseId: string; id: number }>>({});
   const [cvStatusLoading, setCvStatusLoading] = useState(false);
-  const [cvFilter, setCvFilter] = useState("all");
+
+  const [cvFilter, _setCvFilter] = useState(() => lsGet("sm_cvFilter", "all"));
+  const setCvFilter = (v: string) => { _setCvFilter(v); lsSet("sm_cvFilter", v); };
+
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
-  const [replyFilters, setReplyFilters] = useState<string[]>([]);
+
+  const [replyFilters, _setReplyFilters] = useState<string[]>(() => lsGet("sm_replyFilters", []));
+  const setReplyFilters = (v: string[] | ((prev: string[]) => string[])) => {
+    _setReplyFilters((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      lsSet("sm_replyFilters", next);
+      return next;
+    });
+  };
+
   const [replyFilterLoading, setReplyFilterLoading] = useState(false);
   const [replyFilterMatchedMap, setReplyFilterMatchedMap] = useState<Record<string, Record<string, { matchedBy: string }>>>({});
   const [trackerMatchMap, setTrackerMatchMap] = useState<Record<string, Record<string, string> | null>>({});
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
-  const [trackerFilter, setTrackerFilter] = useState("all");
+
+  const [trackerFilter, _setTrackerFilter] = useState(() => lsGet("sm_trackerFilter", "all"));
+  const setTrackerFilter = (v: string) => { _setTrackerFilter(v); lsSet("sm_trackerFilter", v); };
+
   const [skipCvData, setSkipCvData] = useState(false);
   const [skipCvLoading, setSkipCvLoading] = useState(false);
   const [skipCvTsSet, setSkipCvTsSet] = useState<Set<string>>(new Set());

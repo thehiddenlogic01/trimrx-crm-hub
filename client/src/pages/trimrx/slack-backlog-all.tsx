@@ -854,33 +854,55 @@ export default function SlackMessagesPage() {
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyBroadcast, setReplyBroadcast] = useState(false);
-  const [dateFilter, setDateFilter] = useState("");
+  const lsGet = <T,>(key: string, fallback: T): T => {
+    try { const raw = localStorage.getItem(key); return raw !== null ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
+  };
+  const lsSet = (key: string, val: any) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
+
+  const [dateFilter, _setDateFilter] = useState(() => lsGet("sba_dateFilter", ""));
+  const setDateFilter = (v: string) => { _setDateFilter(v); lsSet("sba_dateFilter", v); };
+
   const [showRecentMessages, setShowRecentMessages] = useState(false);
-  const [mentionFilter, setMentionFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [hideReplies, setHideReplies] = useState(false);
+
+  const [mentionFilter, _setMentionFilter] = useState(() => lsGet("sba_mentionFilter", "all"));
+  const setMentionFilter = (v: string) => { _setMentionFilter(v); lsSet("sba_mentionFilter", v); };
+
+  const [statusFilter, _setStatusFilter] = useState(() => lsGet("sba_statusFilter", "all"));
+  const setStatusFilter = (v: string) => { _setStatusFilter(v); lsSet("sba_statusFilter", v); };
+
+  const [searchQuery, _setSearchQuery] = useState(() => lsGet("sba_searchQuery", ""));
+  const setSearchQuery = (v: string) => { _setSearchQuery(v); lsSet("sba_searchQuery", v); };
+
+  const [hideReplies, _setHideReplies] = useState(() => lsGet("sba_hideReplies", false));
+  const setHideReplies = (v: boolean) => { _setHideReplies(v); lsSet("sba_hideReplies", v); };
+
   const [cvStatusMap, setCvStatusMap] = useState<Record<string, { status: string; caseId: string; id: number }>>({});
   const [cvStatusLoading, setCvStatusLoading] = useState(false);
-  const [cvFilter, setCvFilter] = useState("all");
+
+  const [cvFilter, _setCvFilter] = useState(() => lsGet("sba_cvFilter", "all"));
+  const setCvFilter = (v: string) => { _setCvFilter(v); lsSet("sba_cvFilter", v); };
+
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [bulkActionsOpen, setBulkActionsOpen] = useState(false);
   const [dataSyncOpen, setDataSyncOpen] = useState(false);
-  const [replyFilters, setReplyFilters] = useState<string[]>([]);
+
+  const [replyFilters, _setReplyFilters] = useState<string[]>(() => lsGet("sba_replyFilters", []));
+  const setReplyFilters = (v: string[] | ((prev: string[]) => string[])) => {
+    _setReplyFilters((prev) => {
+      const next = typeof v === "function" ? v(prev) : v;
+      lsSet("sba_replyFilters", next);
+      return next;
+    });
+  };
+
   const [replyFilterLoading, setReplyFilterLoading] = useState(false);
   const [replyFilterMatchedMap, setReplyFilterMatchedMap] = useState<Record<string, Record<string, { matchedBy: string }>>>({});
   const loadFromSession = <T,>(key: string, fallback: T): T => {
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (!raw) return fallback;
-      return JSON.parse(raw) as T;
-    } catch { return fallback; }
+    try { const raw = localStorage.getItem(key); return raw !== null ? JSON.parse(raw) as T : fallback; } catch { return fallback; }
   };
-  const saveToSession = (key: string, val: any) => {
-    try { sessionStorage.setItem(key, JSON.stringify(val)); } catch {}
-  };
+  const saveToSession = (key: string, val: any) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
 
   const [trackerMatchMap, _setTrackerMatchMap] = useState<Record<string, Record<string, string> | null>>(() => loadFromSession("sba_trackerMatchMap", {}));
   const setTrackerMatchMap: typeof _setTrackerMatchMap = (v) => {
@@ -891,7 +913,8 @@ export default function SlackMessagesPage() {
     });
   };
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
-  const [trackerFilter, setTrackerFilter] = useState("all");
+  const [trackerFilter, _setTrackerFilter] = useState(() => lsGet("sba_trackerFilter", "all"));
+  const setTrackerFilter = (v: string) => { _setTrackerFilter(v); lsSet("sba_trackerFilter", v); };
   const [expandedPopupPiId, setExpandedPopupPiId] = useState<string | null>(null);
   const [paymentsMap, _setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>(() => loadFromSession("sba_paymentsMap", {}));
   const setPaymentsMap: typeof _setPaymentsMap = (v) => {
