@@ -439,7 +439,7 @@ export function setupSlackRoutes(app: Express) {
         let cursor: string | undefined;
         let page = 0;
         do {
-          const params: any = { channel: channelId, limit: 200, oldest, latest };
+          const params: any = { channel: channelId, limit: 400, oldest, latest };
           if (cursor) params.cursor = cursor;
           const result = await client.conversations.history(params);
           allRawMessages = allRawMessages.concat(result.messages || []);
@@ -850,7 +850,7 @@ export function setupSlackRoutes(app: Express) {
       do {
         const result = await client.conversations.history({
           channel: channelId,
-          limit: 200,
+          limit: 400,
           cursor,
         });
         allMessages = allMessages.concat(result.messages || []);
