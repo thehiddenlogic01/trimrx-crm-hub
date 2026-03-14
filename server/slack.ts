@@ -1436,6 +1436,10 @@ export function setupSlackRoutes(app: Express) {
   const MENTION_NOTIF_CACHE_TTL = 10 * 60 * 1000;
 
   app.get("/api/slack/mention-notifications", async (req, res) => {
+    const notifEnabled = await storage.getSetting("mention_notifications_enabled");
+    if (notifEnabled === "false") {
+      return res.json({ notifications: [], users: {} });
+    }
     const client = await requireSlack(req, res);
     if (!client) return;
     try {

@@ -10,7 +10,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Tag, Package, Crosshair, AlertTriangle, LayoutDashboard, Eye, EyeOff, ArrowUp, ArrowDown, GripVertical, ArrowUpDown } from "lucide-react";
+import { ChevronDown, ChevronRight, Tag, Package, Crosshair, AlertTriangle, LayoutDashboard, Eye, EyeOff, ArrowUp, ArrowDown, GripVertical, ArrowUpDown, Bell, BellOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { REASON_SUBREASON_MAP, DESIRED_ACTION_OPTIONS, CLIENT_THREAT_OPTIONS } from "@shared/classification";
 import { APP_PAGES } from "@shared/sections";
@@ -524,6 +524,79 @@ function SidebarVisibilitySection() {
   );
 }
 
+function NotificationSettingsSection() {
+  const { toast } = useToast();
+
+  const { data, isLoading } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/app-settings/mention_notifications_enabled"],
+    staleTime: 30000,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      await apiRequest("POST", "/api/app-settings/mention_notifications_enabled", { enabled });
+    },
+    onSuccess: (_data, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/app-settings/mention_notifications_enabled"] });
+      toast({
+        title: enabled ? "Mention Notifications Enabled" : "Mention Notifications Disabled",
+        description: enabled
+          ? "The bell will reappear and start polling for mentions."
+          : "No background calls will be made for mention notifications.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const enabled = data?.enabled !== false;
+
+  return (
+    <Card data-testid="card-notification-settings">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-lg">
+          <Bell className="h-5 w-5 text-primary" />
+          Notification Settings
+        </CardTitle>
+        <CardDescription>
+          Control background processes for Slack mention notifications. Disabling this stops all polling and hides the notification bell.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div
+          className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${enabled ? "bg-background" : "bg-muted/50"}`}
+          data-testid="row-mention-notifications-toggle"
+        >
+          <div className="flex items-center gap-3">
+            {enabled ? (
+              <Bell className="h-4 w-4 text-green-500" />
+            ) : (
+              <BellOff className="h-4 w-4 text-muted-foreground" />
+            )}
+            <div>
+              <p className={`text-sm font-medium ${enabled ? "text-foreground" : "text-muted-foreground"}`}>
+                Mention Notifications
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {enabled
+                  ? "Active — polling every 10 minutes for @mentions"
+                  : "Disabled — no background calls, bell hidden"}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={enabled}
+            onCheckedChange={(val) => saveMutation.mutate(val)}
+            disabled={isLoading || saveMutation.isPending}
+            data-testid="switch-mention-notifications"
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminSettingsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
@@ -536,6 +609,7 @@ export default function AdminSettingsPage() {
         </p>
       </div>
 
+      <NotificationSettingsSection />
       <SidebarVisibilitySection />
       <SectionOrderSection />
       <MenuOrderSection />

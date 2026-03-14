@@ -138,6 +138,13 @@ export function SlackMentionNotificationBell() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
 
+  const { data: notifSetting } = useQuery<{ enabled: boolean }>({
+    queryKey: ["/api/app-settings/mention_notifications_enabled"],
+    staleTime: 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+  const notifEnabled = notifSetting?.enabled !== false;
+
   const replyMutation = useMutation({
     mutationFn: async ({ threadTs, text }: { threadTs: string; text: string }) => {
       return apiRequest("POST", `/api/slack/channels/${CHANNEL_ID}/reply`, { threadTs, text });
@@ -165,7 +172,8 @@ export function SlackMentionNotificationBell() {
 
   const { data } = useQuery<{ notifications: MentionNotification[]; users: Record<string, SlackUser> }>({
     queryKey: ["/api/slack/mention-notifications"],
-    refetchInterval: 10 * 60 * 1000,
+    enabled: notifEnabled,
+    refetchInterval: notifEnabled ? 10 * 60 * 1000 : false,
     staleTime: 30000,
     retry: 1,
   });
@@ -208,6 +216,10 @@ export function SlackMentionNotificationBell() {
       }
     }
   }, [notifications]);
+
+  if (notifSetting !== undefined && !notifEnabled) {
+    return null;
+  }
 
   return (
     <>

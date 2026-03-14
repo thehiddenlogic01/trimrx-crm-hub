@@ -16,12 +16,31 @@ import { registerStripePaymentRoutes } from "./stripe-payments";
 import { setupAuditLogRoutes } from "./audit-logs";
 import { setupAuditAlertRoutes } from "./audit-alerts";
 import { seedDefaultUser } from "./seed";
+import { storage } from "./storage";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   setupAuth(app);
+
+  app.get("/api/app-settings/mention_notifications_enabled", async (_req, res) => {
+    try {
+      const val = await storage.getSetting("mention_notifications_enabled");
+      res.json({ enabled: val !== "false" });
+    } catch {
+      res.json({ enabled: true });
+    }
+  });
+
+  app.post("/api/app-settings/mention_notifications_enabled", async (req, res) => {
+    const user = (req as any).user;
+    if (!user || user.role !== "admin") return res.status(403).json({ error: "Admin only" });
+    const { enabled } = req.body;
+    await storage.setSetting("mention_notifications_enabled", enabled === false ? "false" : "true");
+    res.json({ ok: true });
+  });
+
   setupSlackRoutes(app);
   setupCvReportRoutes(app);
   setupUserRoutes(app);
