@@ -5,8 +5,8 @@ import { storage } from "./storage";
 import { logAudit } from "./audit-logs";
 
 const SLACK_TOKEN_KEY = "slack_bot_token";
-const SLACK_USER_TOKEN_KEY = "slack_user_token";
 const SLACK_APP_TOKEN_KEY = "slack_app_token";
+const USER_TOKEN_KEYS = ["slack_user_token_1", "slack_user_token_2", "slack_user_token_3"] as const;
 
 let socketModeClient: SocketModeClient | null = null;
 let socketModeActive = false;
@@ -98,7 +98,10 @@ function broadcastSlackEvent(event: { type: string; channelId: string; ts?: stri
 }
 
 let cachedBotClient: { client: WebClient; token: string } | null = null;
-let cachedUserClient: { client: WebClient; token: string } | null = null;
+let cachedUserClients: Array<{ client: WebClient; token: string } | null> = [null, null, null];
+let roundRobinIdx = 0;
+let cachedUserTokensList: { tokens: (string | null)[]; fetchedAt: number } | null = null;
+const USER_TOKENS_LIST_TTL = 60_000;
 
 function getSlackClient(token: string) {
   return new WebClient(token, {
@@ -114,11 +117,32 @@ function getBotClient(token: string): WebClient {
   return client;
 }
 
-function getCachedUserClient(token: string): WebClient {
-  if (cachedUserClient && cachedUserClient.token === token) return cachedUserClient.client;
+function getCachedUserClient(token: string, slot: number): WebClient {
+  if (cachedUserClients[slot] && cachedUserClients[slot]!.token === token) return cachedUserClients[slot]!.client;
   const client = getSlackClient(token);
-  cachedUserClient = { client, token };
+  cachedUserClients[slot] = { client, token };
   return client;
+}
+
+function invalidateUserTokensCache() {
+  cachedUserTokensList = null;
+}
+
+async function getActiveUserClients(): Promise<WebClient[]> {
+  const now = Date.now();
+  let tokens: (string | null)[];
+  if (cachedUserTokensList && (now - cachedUserTokensList.fetchedAt) < USER_TOKENS_LIST_TTL) {
+    tokens = cachedUserTokensList.tokens;
+  } else {
+    tokens = [];
+    for (const key of USER_TOKEN_KEYS) {
+      tokens.push(await storage.getSetting(key) || null);
+    }
+    cachedUserTokensList = { tokens, fetchedAt: now };
+  }
+  return tokens
+    .map((t, i) => t ? getCachedUserClient(t, i) : null)
+    .filter(Boolean) as WebClient[];
 }
 
 async function requireSlack(req: Request, res: Response): Promise<WebClient | null> {
@@ -131,9 +155,11 @@ async function requireSlack(req: Request, res: Response): Promise<WebClient | nu
 }
 
 async function getUserSlackClient(): Promise<WebClient | null> {
-  const token = await storage.getSetting(SLACK_USER_TOKEN_KEY);
-  if (!token) return null;
-  return getCachedUserClient(token);
+  const active = await getActiveUserClients();
+  if (active.length === 0) return null;
+  const pick = active[roundRobinIdx % active.length];
+  roundRobinIdx = (roundRobinIdx + 1) % 1_000_000;
+  return pick;
 }
 
 const slackQueue: (() => Promise<void>)[] = [];
@@ -177,24 +203,39 @@ function processQueue() {
 }
 
 export function setupSlackRoutes(app: Express) {
+  (async () => {
+    const oldKey = "slack_user_token";
+    const oldToken = await storage.getSetting(oldKey);
+    if (oldToken) {
+      const slot1 = await storage.getSetting(USER_TOKEN_KEYS[0]);
+      if (!slot1) await storage.setSetting(USER_TOKEN_KEYS[0], oldToken);
+      await storage.deleteSetting(oldKey);
+      invalidateUserTokensCache();
+    }
+  })().catch(() => {});
+
   app.get("/api/slack/status", async (_req, res) => {
     const token = await storage.getSetting(SLACK_TOKEN_KEY);
-    const userToken = await storage.getSetting(SLACK_USER_TOKEN_KEY);
     const appToken = await storage.getSetting(SLACK_APP_TOKEN_KEY);
     if (!token) {
-      return res.json({ connected: false, userTokenConnected: false, appTokenConnected: false, socketModeActive: false });
+      return res.json({ connected: false, userTokenConnected: false, userTokens: [], appTokenConnected: false, socketModeActive: false });
     }
     try {
       const client = getSlackClient(token);
       const auth = await client.auth.test();
-      let userTokenInfo: { connected: boolean; user?: string } = { connected: false };
-      if (userToken) {
-        try {
-          const userClient = getSlackClient(userToken);
-          const userAuth = await userClient.auth.test();
-          userTokenInfo = { connected: true, user: userAuth.user as string };
-        } catch {
-          userTokenInfo = { connected: false };
+      const userTokens: { slot: number; connected: boolean; user?: string }[] = [];
+      for (let i = 0; i < USER_TOKEN_KEYS.length; i++) {
+        const ut = await storage.getSetting(USER_TOKEN_KEYS[i]);
+        if (ut) {
+          try {
+            const uc = getSlackClient(ut);
+            const ua = await uc.auth.test();
+            userTokens.push({ slot: i + 1, connected: true, user: ua.user as string });
+          } catch {
+            userTokens.push({ slot: i + 1, connected: false });
+          }
+        } else {
+          userTokens.push({ slot: i + 1, connected: false });
         }
       }
       return res.json({
@@ -202,13 +243,13 @@ export function setupSlackRoutes(app: Express) {
         team: auth.team,
         user: auth.user,
         teamId: auth.team_id,
-        userTokenConnected: userTokenInfo.connected,
-        userTokenUser: userTokenInfo.user,
+        userTokenConnected: userTokens.some(t => t.connected),
+        userTokens,
         appTokenConnected: !!appToken,
         socketModeActive,
       });
     } catch {
-      return res.json({ connected: false, error: "Invalid token", userTokenConnected: false, appTokenConnected: false, socketModeActive: false });
+      return res.json({ connected: false, error: "Invalid token", userTokenConnected: false, userTokens: [], appTokenConnected: false, socketModeActive: false });
     }
   });
 
@@ -233,27 +274,29 @@ export function setupSlackRoutes(app: Express) {
   });
 
   app.post("/api/slack/connect-user-token", async (req, res) => {
-    const { token } = req.body;
+    const { token, slot = 1 } = req.body;
     if (!token || typeof token !== "string" || !token.startsWith("xoxp-")) {
       return res.status(400).json({ message: "Valid User OAuth Token (xoxp-...) is required" });
     }
+    const slotIdx = Math.max(0, Math.min(2, parseInt(String(slot)) - 1));
     try {
       const client = getSlackClient(token);
       const auth = await client.auth.test();
-      await storage.setSetting(SLACK_USER_TOKEN_KEY, token);
-      return res.json({
-        connected: true,
-        user: auth.user,
-      });
+      await storage.setSetting(USER_TOKEN_KEYS[slotIdx], token);
+      invalidateUserTokensCache();
+      return res.json({ connected: true, user: auth.user, slot: slotIdx + 1 });
     } catch {
       return res.status(400).json({ message: "Invalid User OAuth Token. Please check and try again." });
     }
   });
 
-  app.post("/api/slack/disconnect-user-token", async (_req, res) => {
-    await storage.deleteSetting(SLACK_USER_TOKEN_KEY);
-    cachedUserClient = null;
-    return res.json({ connected: false });
+  app.post("/api/slack/disconnect-user-token", async (req, res) => {
+    const { slot = 1 } = req.body;
+    const slotIdx = Math.max(0, Math.min(2, parseInt(String(slot)) - 1));
+    await storage.deleteSetting(USER_TOKEN_KEYS[slotIdx]);
+    cachedUserClients[slotIdx] = null;
+    invalidateUserTokensCache();
+    return res.json({ connected: false, slot: slotIdx + 1 });
   });
 
   app.post("/api/slack/connect-app-token", async (req, res) => {

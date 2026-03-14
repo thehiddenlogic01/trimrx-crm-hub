@@ -94,10 +94,20 @@ function SectionToggle({ title, icon: Icon, iconColor, status, children }: {
 function SlackSection() {
   const { toast } = useToast();
   const [botToken, setBotToken] = useState("");
-  const [userToken, setUserToken] = useState("");
+  const [userTokenInputs, setUserTokenInputs] = useState(["", "", ""]);
   const [appToken, setAppToken] = useState("");
 
-  const { data: status } = useQuery<{ connected: boolean; team?: string; botId?: string; userTokenConnected?: boolean; appTokenConnected?: boolean; socketModeActive?: boolean }>({
+  type SlackStatus = {
+    connected: boolean;
+    team?: string;
+    botId?: string;
+    userTokenConnected?: boolean;
+    userTokens?: { slot: number; connected: boolean; user?: string }[];
+    appTokenConnected?: boolean;
+    socketModeActive?: boolean;
+  };
+
+  const { data: status } = useQuery<SlackStatus>({
     queryKey: ["/api/slack/status"],
     refetchInterval: 10000,
   });
@@ -124,23 +134,23 @@ function SlackSection() {
   });
 
   const connectUserMutation = useMutation({
-    mutationFn: async (token: string) => {
-      const res = await apiRequest("POST", "/api/slack/connect-user-token", { token });
+    mutationFn: async ({ token, slot }: { token: string; slot: number }) => {
+      const res = await apiRequest("POST", "/api/slack/connect-user-token", { token, slot });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/slack/status"] });
-      toast({ title: "User token connected" });
-      setUserToken("");
+      toast({ title: `User ${vars.slot} token connected` });
+      setUserTokenInputs(prev => { const n = [...prev]; n[vars.slot - 1] = ""; return n; });
     },
     onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
 
   const disconnectUserMutation = useMutation({
-    mutationFn: async () => { await apiRequest("POST", "/api/slack/disconnect-user-token", {}); },
-    onSuccess: () => {
+    mutationFn: async (slot: number) => { await apiRequest("POST", "/api/slack/disconnect-user-token", { slot }); },
+    onSuccess: (_data, slot) => {
       queryClient.invalidateQueries({ queryKey: ["/api/slack/status"] });
-      toast({ title: "User token disconnected" });
+      toast({ title: `User ${slot} token removed` });
     },
   });
 
@@ -166,6 +176,8 @@ function SlackSection() {
   });
 
   const connected = status?.connected || false;
+  const userTokens = status?.userTokens || [{ slot: 1, connected: false }, { slot: 2, connected: false }, { slot: 3, connected: false }];
+  const activeCount = userTokens.filter(t => t.connected).length;
 
   return (
     <SectionToggle
@@ -222,46 +234,68 @@ function SlackSection() {
         </div>
 
         {connected && (
-          <div className="space-y-2 pt-2 border-t">
-            <Label className="text-sm font-medium">User Token (Optional)</Label>
-            <p className="text-xs text-muted-foreground">Enables workspace-wide fast search and faster message fetching</p>
-            {status?.userTokenConnected ? (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
-                <div className="flex-1">
-                  <p className="text-sm text-green-600 flex items-center gap-1">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> User token configured
-                  </p>
+          <div className="space-y-3 pt-2 border-t">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-sm font-medium">User Token Pool — Round-Robin Load Balancer</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">Each user token has its own rate limit. Active tokens share the load evenly.</p>
+              </div>
+              <Badge
+                className={activeCount > 0 ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-muted text-muted-foreground"}
+                data-testid="badge-user-tokens-active"
+              >
+                {activeCount}/3 active
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {userTokens.map((ut) => (
+                <div key={ut.slot} className="rounded-lg border p-3 space-y-2" data-testid={`card-user-token-${ut.slot}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">User {ut.slot}</span>
+                    {ut.connected && (
+                      <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs" data-testid={`badge-user-token-status-${ut.slot}`}>
+                        <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> {ut.user || "Connected"}
+                      </Badge>
+                    )}
+                  </div>
+                  {ut.connected ? (
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">Token is active and receiving API calls</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => disconnectUserMutation.mutate(ut.slot)}
+                        disabled={disconnectUserMutation.isPending}
+                        data-testid={`button-disconnect-user-token-${ut.slot}`}
+                      >
+                        {disconnectUserMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        type="password"
+                        placeholder="xoxp-..."
+                        value={userTokenInputs[ut.slot - 1]}
+                        onChange={(e) => setUserTokenInputs(prev => { const n = [...prev]; n[ut.slot - 1] = e.target.value; return n; })}
+                        data-testid={`input-user-token-${ut.slot}`}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => connectUserMutation.mutate({ token: userTokenInputs[ut.slot - 1], slot: ut.slot })}
+                        disabled={!userTokenInputs[ut.slot - 1].trim() || connectUserMutation.isPending}
+                        data-testid={`button-connect-user-token-${ut.slot}`}
+                      >
+                        {connectUserMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                        Add
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => disconnectUserMutation.mutate()}
-                  disabled={disconnectUserMutation.isPending}
-                  data-testid="button-disconnect-slack-user"
-                >
-                  Remove
-                </Button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <Input
-                  type="password"
-                  placeholder="xoxp-..."
-                  value={userToken}
-                  onChange={(e) => setUserToken(e.target.value)}
-                  data-testid="input-slack-user-token"
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => connectUserMutation.mutate(userToken)}
-                  disabled={!userToken.trim() || connectUserMutation.isPending}
-                  data-testid="button-connect-slack-user"
-                >
-                  {connectUserMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                  Add
-                </Button>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         )}
 
