@@ -952,6 +952,28 @@ export default function SlackMessagesPage() {
     if (d) sessionStorage.setItem("sba_lastPulledTime", d.toISOString());
     else sessionStorage.removeItem("sba_lastPulledTime");
   };
+
+  const [staleWarning, setStaleWarning] = useState<{ idleMinutes: number } | null>(null);
+  const hiddenAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000;
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        hiddenAtRef.current = Date.now();
+      } else {
+        if (hiddenAtRef.current !== null) {
+          const idleMs = Date.now() - hiddenAtRef.current;
+          hiddenAtRef.current = null;
+          if (idleMs >= STALE_THRESHOLD_MS) {
+            setStaleWarning({ idleMinutes: Math.floor(idleMs / 60000) });
+          }
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
   const [lastPulledPerMsg, _setLastPulledPerMsg] = useState<Record<string, Date>>(() => {
     try {
       const raw = sessionStorage.getItem("sba_lastPulledPerMsg");
@@ -2133,6 +2155,43 @@ export default function SlackMessagesPage() {
               {filteredMessages.length} result{filteredMessages.length !== 1 ? "s" : ""} found for "{debouncedSearch}"
             </span>
           )}
+        </div>
+      )}
+
+      {staleWarning && (
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-300 dark:bg-amber-950/40 dark:border-amber-700 text-sm">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="font-medium text-amber-800 dark:text-amber-200">Data may be stale</span>
+            <span className="text-amber-700 dark:text-amber-300 ml-1.5">
+              Page was inactive for {staleWarning.idleMinutes >= 60
+                ? `${Math.floor(staleWarning.idleMinutes / 60)}h ${staleWarning.idleMinutes % 60}m`
+                : `${staleWarning.idleMinutes}m`}. Mark-done and filter results may not reflect the latest Slack state.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-200 dark:hover:bg-amber-900"
+              onClick={() => {
+                setStaleWarning(null);
+                forceRefreshRef.current = true;
+                refetchMessages();
+              }}
+              data-testid="button-stale-pull-again"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Pull Again
+            </Button>
+            <button
+              onClick={() => setStaleWarning(null)}
+              className="text-amber-500 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-200 p-0.5"
+              data-testid="button-stale-dismiss"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
