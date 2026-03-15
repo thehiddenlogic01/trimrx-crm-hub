@@ -2983,17 +2983,48 @@ function MessageCard({
                     {paymentData.paymentIntents.map((pi: any, idx: number) => {
                       const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
                       const isSidebarExpanded = expandedSidebarPiId === pi.id;
+                      const isFullRefund = pi.refunded && pi.amountRefunded >= pi.amount;
+                      const isPartialRefund = pi.refunded && pi.amountRefunded > 0 && pi.amountRefunded < pi.amount;
+                      const isDisputed = pi.disputed;
+                      const isCanceled = displayStatus === "canceled";
+                      const isFailed = displayStatus === "failed" || displayStatus === "requires_payment_method";
                       return (
-                      <div key={pi.id || idx} className="border rounded px-2 py-1 bg-muted/30 cursor-pointer" onClick={() => setExpandedSidebarPiId(isSidebarExpanded ? null : pi.id)}>
+                      <div key={pi.id || idx}
+                        className={`border rounded px-2 py-1 cursor-pointer transition-colors ${
+                          isDisputed ? "bg-amber-50 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700" :
+                          isFullRefund ? "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800" :
+                          isPartialRefund ? "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800" :
+                          isCanceled ? "bg-gray-50 border-gray-200 dark:bg-gray-900/30 dark:border-gray-700" :
+                          isFailed ? "bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800" :
+                          "bg-muted/30"
+                        }`}
+                        onClick={() => setExpandedSidebarPiId(isSidebarExpanded ? null : pi.id)}>
                         <div className="flex justify-between items-center gap-1">
-                          <span className="font-medium">${pi.amount?.toFixed(2)} {pi.currency}</span>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 flex-wrap min-w-0">
+                            <span className="font-medium text-xs">${pi.amount?.toFixed(2)} {pi.currency}</span>
+                            {isDisputed && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-700 whitespace-nowrap">
+                                ⚠ Dispute
+                              </span>
+                            )}
+                            {isFullRefund && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border border-red-200 dark:border-red-800 whitespace-nowrap">
+                                ↩ Refunded ${pi.amountRefunded?.toFixed(2)}
+                              </span>
+                            )}
+                            {isPartialRefund && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold px-1 py-0.5 rounded bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 border border-orange-200 dark:border-orange-800 whitespace-nowrap">
+                                ↩ Partial −${pi.amountRefunded?.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
                             <StripeStatusBadge status={displayStatus} size="xs" />
                             {isSidebarExpanded ? <ChevronUp className="h-2.5 w-2.5 text-muted-foreground" /> : <ChevronDown className="h-2.5 w-2.5 text-muted-foreground" />}
                           </div>
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(pi.created).toLocaleDateString("en-US", { timeZone: "America/New_York" })} — {pi.description || "—"}
+                          {new Date(pi.created).toLocaleDateString("en-US", { timeZone: "America/Guatemala" })} — {pi.description || "—"}
                         </div>
                         {isSidebarExpanded && (
                           <div className="mt-1 border-t pt-1" onClick={(e) => e.stopPropagation()}>

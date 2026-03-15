@@ -720,6 +720,7 @@ export function registerStripePaymentRoutes(app: Express) {
           const charge = (pi as any).latest_charge as any;
           const refunded = charge?.refunded || false;
           const amountRefunded = refunded ? ((charge?.amount_refunded || 0) / 100) : 0;
+          const disputed = charge?.disputed || false;
           allIntents.push({
             id: pi.id,
             amount: pi.amount / 100,
@@ -727,6 +728,7 @@ export function registerStripePaymentRoutes(app: Express) {
             status: pi.status,
             refunded,
             amountRefunded,
+            disputed,
             description: pi.description || "",
             created: pi.created * 1000,
             lastError: pi.last_payment_error?.message || null,
