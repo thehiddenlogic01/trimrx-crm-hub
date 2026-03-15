@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -55,7 +55,7 @@ import {
   Eye, EyeOff, CheckCircle2, MessageSquare, CheckSquare, XCircle,
   Send, MessageCircle, ChevronUp, ChevronDown, CreditCard, DollarSign,
   AlertCircle, FileText, CornerDownRight, Undo2, Trash2, Check, X,
-  ChevronLeft, ChevronRight, Pencil,
+  ChevronLeft, ChevronRight, Pencil, Clock, AlertTriangle, RefreshCw,
 } from "lucide-react";
 import type { CvReport } from "@shared/schema";
 
@@ -710,11 +710,56 @@ function InlineMultiDropdownCell({ reportId, colKey, value, options }: { reportI
   );
 }
 
+function PIActivityIconRet({ icon, type }: { icon: string; type: string }) {
+  const size = "h-3.5 w-3.5";
+  if (type === "succeeded") return <CheckCircle2 className={`${size} text-green-600`} />;
+  if (type === "failed" || type === "error") return <XCircle className={`${size} text-red-500`} />;
+  if (type === "canceled") return <XCircle className={`${size} text-muted-foreground`} />;
+  if (icon === "alert" || type === "requires_action") return <AlertTriangle className={`${size} text-yellow-500`} />;
+  if (type === "refunded") return <RefreshCw className={`${size} text-blue-500`} />;
+  if (type === "disputed") return <AlertCircle className={`${size} text-amber-500`} />;
+  return <Clock className={`${size} text-muted-foreground`} />;
+}
+
+function PIActivityInlineRet({ piId }: { piId: string }) {
+  const { data, isLoading, error } = useQuery<{ activity: any[] }>({
+    queryKey: ["/api/stripe-payments/pi-activity", piId],
+    queryFn: async () => {
+      const res = await fetch(`/api/stripe-payments/pi-activity/${piId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch activity");
+      return res.json();
+    },
+  });
+  if (isLoading) return <div className="flex items-center gap-2 py-2 px-3 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Loading activity...</div>;
+  if (error || !data?.activity?.length) return <div className="py-1 px-3 text-[10px] text-muted-foreground italic">No recent activity</div>;
+  return (
+    <div className="px-3 py-2">
+      <h5 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Recent Activity</h5>
+      <div className="relative pl-5 space-y-1.5">
+        <div className="absolute left-[7px] top-1 bottom-1 w-px bg-border" />
+        {data.activity.map((item: any, idx: number) => (
+          <div key={idx} className="relative flex items-start gap-2">
+            <div className="absolute -left-5 top-0.5 bg-background p-0.5">
+              <PIActivityIconRet icon={item.icon} type={item.type} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-foreground leading-tight">{item.title}</p>
+              {item.description && <p className="text-[10px] text-muted-foreground leading-snug mt-0.5">{item.description}</p>}
+              <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(item.timestamp).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Guatemala" })}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
+  const [expandedPopupPiId, setExpandedPopupPiId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleClick = async () => {
@@ -858,30 +903,48 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {data.paymentIntents.map((pi: any) => (
-                              <tr key={pi.id} className="border-t">
-                                <td className="p-2 text-xs whitespace-nowrap">{new Date(pi.created).toLocaleString()}</td>
-                                <td className="p-2 whitespace-nowrap font-medium">
-                                  <div>${pi.amount.toFixed(2)} {pi.currency}</div>
-                                  {pi.refunded && pi.amountRefunded > 0 && (
-                                    <div className="text-xs text-red-600">−${pi.amountRefunded.toFixed(2)} refunded</div>
+                            {data.paymentIntents.map((pi: any) => {
+                              const displayStatus = pi.lastError && pi.status !== "succeeded" ? "failed" : pi.status;
+                              const isExpanded = expandedPopupPiId === pi.id;
+                              return (
+                                <Fragment key={pi.id}>
+                                  <tr className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => setExpandedPopupPiId(isExpanded ? null : pi.id)}>
+                                    <td className="p-2 text-xs whitespace-nowrap">{new Date(pi.created).toLocaleString("en-US", { timeZone: "America/Guatemala" })}</td>
+                                    <td className="p-2 whitespace-nowrap font-medium">
+                                      <div>${pi.amount.toFixed(2)} {pi.currency}</div>
+                                      {pi.refunded && pi.amountRefunded > 0 && (
+                                        <div className="text-xs text-red-600">−${pi.amountRefunded.toFixed(2)} refunded</div>
+                                      )}
+                                    </td>
+                                    <td className="p-2">
+                                      <div className="flex flex-col gap-1">
+                                        <Badge variant="outline" className={statusColor(displayStatus)}>
+                                          {displayStatus === "succeeded" && "✓ "}{displayStatus}
+                                        </Badge>
+                                        {pi.refunded && (
+                                          <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200 dark:bg-red-950 dark:text-red-300 text-xs">
+                                            ↩ Refunded
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">
+                                      <div className="flex items-center gap-1">
+                                        {pi.description || "—"}
+                                        {isExpanded ? <ChevronUp className="h-3 w-3 flex-shrink-0" /> : <ChevronDown className="h-3 w-3 flex-shrink-0" />}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr>
+                                      <td colSpan={4} className="bg-muted/20 border-t">
+                                        <PIActivityInlineRet piId={pi.id} />
+                                      </td>
+                                    </tr>
                                   )}
-                                </td>
-                                <td className="p-2">
-                                  <div className="flex flex-col gap-1">
-                                    <Badge variant="outline" className={statusColor(pi.status)}>
-                                      {pi.status === "succeeded" && "✓ "}{pi.status}
-                                    </Badge>
-                                    {pi.refunded && (
-                                      <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200 dark:bg-red-950 dark:text-red-300 text-xs">
-                                        ↩ Refunded
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">{pi.description || "—"}</td>
-                              </tr>
-                            ))}
+                                </Fragment>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

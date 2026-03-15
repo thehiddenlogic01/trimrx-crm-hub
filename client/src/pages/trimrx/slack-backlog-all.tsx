@@ -915,7 +915,6 @@ export default function SlackMessagesPage() {
   const [trackerMatchLoading, setTrackerMatchLoading] = useState(false);
   const [trackerFilter, _setTrackerFilter] = useState(() => lsGet("sba_trackerFilter", "all"));
   const setTrackerFilter = (v: string) => { _setTrackerFilter(v); lsSet("sba_trackerFilter", v); };
-  const [expandedPopupPiId, setExpandedPopupPiId] = useState<string | null>(null);
   const [paymentsMap, _setPaymentsMap] = useState<Record<string, { email?: string; paymentIntents?: any[]; subscriptions?: any[]; customers?: any[]; found?: boolean; message?: string; error?: string }>>(() => loadFromSession("sba_paymentsMap", {}));
   const setPaymentsMap: typeof _setPaymentsMap = (v) => {
     _setPaymentsMap((prev) => {
@@ -2333,6 +2332,7 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
+  const [expandedPopupPiId, setExpandedPopupPiId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleClick = async () => {
