@@ -3136,12 +3136,27 @@ function MessageCard({
                   ) : refundData === null || (!refundData.found && !refundData.reason) ? (
                     <span className="text-foreground">—</span>
                   ) : refundData.found ? (
-                    <span className="flex flex-col items-end gap-0.5">
+                    <span className="flex flex-col items-end gap-1">
                       <span className="font-bold text-blue-600 dark:text-blue-400">Refund case found</span>
-                      {refundData.statusFromP ? (
-                        <span className="text-[10px] text-muted-foreground">{refundData.statusFromP}</span>
-                      ) : (
-                        <span className="text-[10px] text-amber-500 italic">not updated yet</span>
+                      {refundData.statusFromP ? (() => {
+                        const s = refundData.statusFromP.toLowerCase();
+                        const isDone = s === "done" || s === "completed" || s === "approved" || s === "processed";
+                        const isDenied = s === "denied" || s === "rejected" || s === "declined" || s === "cancelled" || s === "canceled";
+                        const isPending = s === "pending" || s === "in progress" || s === "new" || s.includes("process") || s.includes("review");
+                        return (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide border whitespace-nowrap ${
+                            isDone ? "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/50 dark:text-green-300 dark:border-green-700"
+                            : isDenied ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-900/50 dark:text-red-300 dark:border-red-700"
+                            : isPending ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/50 dark:text-amber-300 dark:border-amber-700"
+                            : "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-700"
+                          }`}>
+                            {isDone ? "✓ " : isDenied ? "✗ " : "● "}{refundData.statusFromP}
+                          </span>
+                        );
+                      })() : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-gray-100 text-gray-500 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600 italic whitespace-nowrap">
+                          not updated yet
+                        </span>
                       )}
                     </span>
                   ) : (
