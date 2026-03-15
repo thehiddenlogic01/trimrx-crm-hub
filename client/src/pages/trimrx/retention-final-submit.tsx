@@ -742,9 +742,11 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
   };
 
   const statusColor = (s: string) => {
-    if (s === "succeeded") return "text-green-700 bg-green-100 dark:bg-green-900 dark:text-green-300";
-    if (s === "canceled" || s === "failed") return "text-red-700 bg-red-100 dark:bg-red-900 dark:text-red-300";
-    if (s === "requires_payment_method" || s === "requires_action") return "text-yellow-700 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-300";
+    if (s === "succeeded" || s === "active") return "text-green-700 bg-green-100 dark:bg-green-900 dark:text-green-300";
+    if (s === "canceled" || s === "failed" || s === "incomplete_expired") return "text-red-700 bg-red-100 dark:bg-red-900 dark:text-red-300";
+    if (s === "past_due" || s === "unpaid" || s === "requires_payment_method" || s === "requires_action") return "text-yellow-700 bg-yellow-100 dark:bg-yellow-900 dark:text-yellow-300";
+    if (s === "trialing") return "text-blue-700 bg-blue-100 dark:bg-blue-900 dark:text-blue-300";
+    if (s === "paused") return "text-orange-700 bg-orange-100 dark:bg-orange-900 dark:text-orange-300";
     return "text-foreground bg-muted";
   };
 
@@ -794,29 +796,51 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                     <span>{data.email}</span>
                     <Badge variant="secondary" className="text-xs">{data.source}</Badge>
                   </div>
-                  {data.subscriptions?.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-semibold mb-2 flex items-center gap-1">
-                        <DollarSign className="h-4 w-4" />
-                        Subscriptions ({data.subscriptions.length})
-                      </h4>
-                      <div className="space-y-2">
+
+                  {/* Current Subscription Status — prominent summary */}
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted/50 px-3 py-2 border-b flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-semibold">Current Subscription Status</span>
+                    </div>
+                    {data.subscriptions?.length > 0 ? (
+                      <div className="divide-y">
                         {data.subscriptions.map((sub: any) => (
-                          <div key={sub.id} className="border rounded-lg p-3 text-sm">
-                            <div className="flex items-center justify-between">
-                              <Badge className={statusColor(sub.status)}>{sub.status}</Badge>
-                              <span className="text-xs text-muted-foreground">{new Date(sub.created).toLocaleDateString()}</span>
-                            </div>
-                            {sub.items?.map((item: any, i: number) => (
-                              <div key={i} className="mt-1 text-xs text-muted-foreground">
-                                ${item.amount.toFixed(2)} {item.currency}/{item.interval}
+                          <div key={sub.id} className="p-3 flex items-start justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge className={`text-xs font-semibold ${statusColor(sub.status)}`}>
+                                  {sub.status.toUpperCase()}
+                                </Badge>
+                                {sub.cancelAtPeriodEnd && (
+                                  <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">
+                                    Cancels at period end
+                                  </Badge>
+                                )}
                               </div>
-                            ))}
+                              {sub.items?.map((item: any, i: number) => (
+                                <div key={i} className="text-xs text-muted-foreground">
+                                  {item.productName !== "Unknown" ? item.productName : ""}{" "}
+                                  ${item.amount.toFixed(2)} {item.currency}/{item.interval}
+                                </div>
+                              ))}
+                              {sub.currentPeriodEnd && (
+                                <div className="text-xs text-muted-foreground">
+                                  Period ends: {new Date(sub.currentPeriodEnd).toLocaleDateString()}
+                                </div>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                              Since {new Date(sub.created).toLocaleDateString()}
+                            </span>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <div className="p-3 text-sm text-muted-foreground italic">No subscriptions found for this customer</div>
+                    )}
+                  </div>
+
                   {data.paymentIntents?.length > 0 ? (
                     <div>
                       <h4 className="text-sm font-semibold mb-2 flex items-center gap-1">
@@ -837,11 +861,23 @@ function PaymentIntentsButton({ msg }: { msg: SlackMessage }) {
                             {data.paymentIntents.map((pi: any) => (
                               <tr key={pi.id} className="border-t">
                                 <td className="p-2 text-xs whitespace-nowrap">{new Date(pi.created).toLocaleString()}</td>
-                                <td className="p-2 whitespace-nowrap font-medium">${pi.amount.toFixed(2)} {pi.currency}</td>
+                                <td className="p-2 whitespace-nowrap font-medium">
+                                  <div>${pi.amount.toFixed(2)} {pi.currency}</div>
+                                  {pi.refunded && pi.amountRefunded > 0 && (
+                                    <div className="text-xs text-red-600">−${pi.amountRefunded.toFixed(2)} refunded</div>
+                                  )}
+                                </td>
                                 <td className="p-2">
-                                  <Badge variant="outline" className={statusColor(pi.status)}>
-                                    {pi.status === "succeeded" && "✓ "}{pi.status}
-                                  </Badge>
+                                  <div className="flex flex-col gap-1">
+                                    <Badge variant="outline" className={statusColor(pi.status)}>
+                                      {pi.status === "succeeded" && "✓ "}{pi.status}
+                                    </Badge>
+                                    {pi.refunded && (
+                                      <Badge variant="outline" className="text-red-700 bg-red-50 border-red-200 dark:bg-red-950 dark:text-red-300 text-xs">
+                                        ↩ Refunded
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="p-2 text-xs text-muted-foreground max-w-[200px] truncate">{pi.description || "—"}</td>
                               </tr>

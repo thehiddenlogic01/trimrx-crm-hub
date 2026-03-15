@@ -712,16 +712,21 @@ export function registerStripePaymentRoutes(app: Express) {
 
       for (const cust of customers.data) {
         const [intents, subs] = await Promise.all([
-          stripe.paymentIntents.list({ customer: cust.id, limit: 50 }),
+          stripe.paymentIntents.list({ customer: cust.id, limit: 50, expand: ["data.latest_charge"] } as any),
           stripe.subscriptions.list({ customer: cust.id, limit: 20, status: "all" }),
         ]);
 
         for (const pi of intents.data) {
+          const charge = (pi as any).latest_charge as any;
+          const refunded = charge?.refunded || false;
+          const amountRefunded = refunded ? ((charge?.amount_refunded || 0) / 100) : 0;
           allIntents.push({
             id: pi.id,
             amount: pi.amount / 100,
             currency: pi.currency.toUpperCase(),
             status: pi.status,
+            refunded,
+            amountRefunded,
             description: pi.description || "",
             created: pi.created * 1000,
             lastError: pi.last_payment_error?.message || null,
@@ -733,6 +738,8 @@ export function registerStripePaymentRoutes(app: Express) {
             id: sub.id,
             status: sub.status,
             created: sub.created * 1000,
+            cancelAtPeriodEnd: sub.cancel_at_period_end,
+            currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : null,
             items: sub.items.data.map((item) => ({
               amount: (item.price.unit_amount || 0) / 100,
               currency: (item.price.currency || "usd").toUpperCase(),
